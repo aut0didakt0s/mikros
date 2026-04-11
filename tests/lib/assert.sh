@@ -40,7 +40,7 @@ assert_file_contains() {
   local pattern="$2"
   local msg="${3:-file contains pattern}"
   TESTS_RUN=$((TESTS_RUN + 1))
-  if ! grep -q "$pattern" "$path" 2>/dev/null; then
+  if ! grep -qF "$pattern" "$path" 2>/dev/null; then
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "FAIL [$msg]: file '$path' does not contain '$pattern'" >&2
     return 1
@@ -52,7 +52,7 @@ assert_file_not_contains() {
   local pattern="$2"
   local msg="${3:-file does not contain pattern}"
   TESTS_RUN=$((TESTS_RUN + 1))
-  if grep -q "$pattern" "$path" 2>/dev/null; then
+  if grep -qF "$pattern" "$path" 2>/dev/null; then
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "FAIL [$msg]: file '$path' contains forbidden '$pattern'" >&2
     return 1
