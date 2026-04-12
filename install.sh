@@ -15,6 +15,9 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # --- 1. Copy template files ---------------------------------------------
+# Destructive on re-run: remove any prior mikrós install in the target so
+# a second run refreshes cleanly instead of creating nested .claude/.claude/
+rm -rf "$TARGET/.claude"  "$TARGET/.mikros"
 cp -r "$HERE/.claude"  "$TARGET/.claude"
 cp -r "$HERE/.mikros"  "$TARGET/.mikros"
 cp    "$HERE/CLAUDE.md" "$TARGET/CLAUDE.md"
