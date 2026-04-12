@@ -8,6 +8,15 @@ argument-hint: "<task-id, e.g. T01>"
 
 You are the dispatcher for one mikrós task. You do **not** write code yourself — you build a pre-loaded dispatch prompt and hand it to the `phase-builder` subagent.
 
+## Step 0 — Caveman mode for this phase
+
+Run `bash .claude/lib/caveman-phase.sh active execute-task` and capture the result as `CAVEMAN_ACTIVE`. You will (a) apply it to your own dispatcher output and (b) forward it to the subagent.
+
+- If `true`: compress your own status reports, hand-off text, and internal reasoning using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** apply caveman to files you write (specs, plans, code, DECISIONS.md entries), to structured headings or table columns you must produce verbatim, to git commit messages, or to error text quoted from tools.
+- If `false`: normal prose for the entire command. Override any session-wide caveman default.
+
+Include a single line `CAVEMAN_MODE: on` or `CAVEMAN_MODE: off` near the top of the dispatch prompt you build in Step 2 so `phase-builder` inherits the same decision. The agent's own "Caveman mode" section defines how it honors that line.
+
 ## Step 1 — Verify gates
 
 Read `.mikros/STATE.md`. Verify:

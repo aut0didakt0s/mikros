@@ -49,6 +49,14 @@ assert_file_contains "$FILE" "Bash(cabal:*)"       "allowlist: Haskell (cabal)"
 assert_file_contains "$FILE" "Bash(php:*)"         "allowlist: PHP (php)"
 assert_file_contains "$FILE" "Bash(shellcheck:*)"  "allowlist: shell (shellcheck)"
 
+# Caveman mode: agent must honor the dispatch-prompt CAVEMAN_MODE line and
+# exclude load-bearing sections (Worktree, Verification output) from caveman.
+assert_file_contains "$FILE" "## Caveman mode"              "caveman mode section present"
+assert_file_contains "$FILE" "CAVEMAN_MODE: on"             "caveman mode: recognizes on"
+assert_file_contains "$FILE" "CAVEMAN_MODE: off"            "caveman mode: recognizes off"
+assert_file_contains "$FILE" "\`### Worktree\` section"     "caveman mode: excludes Worktree section"
+assert_file_contains "$FILE" "\`### Verification output\` block" "caveman mode: excludes Verification output"
+
 # Destructive ops must stay out of the allowlist.
 assert_file_not_contains "$FILE" "Bash(rm:"       "no Bash(rm:*)"
 assert_file_not_contains "$FILE" "Bash(curl:"     "no Bash(curl:*)"

@@ -11,6 +11,7 @@ TESTS=(
   tests/test_session_start.sh
   tests/test_post_edit.sh
   tests/test_pre_tool_use.sh
+  tests/test_caveman_phase.sh
   tests/test_commands.sh
   tests/test_templates.sh
   tests/test_claude_md.sh

@@ -1,12 +1,19 @@
 ---
 name: plan-slice
-description: Decompose a slice into 1-7 tasks, each sized to fit in one context window. Writes S##-PLAN.md with must-haves per task. Gated on /discuss having run for the current milestone.
+description: Decompose a slice into a set number of tasks, each sized to fit in one context window. Writes S##-PLAN.md with must-haves per task. Gated on /discuss having run for the current milestone.
 argument-hint: "<slice-id, e.g. S01>"
 ---
 
 # /plan-slice — decompose a slice into tasks
 
-You are planning a slice for mikrós. A slice is a demoable vertical capability that contains 1–7 tasks.
+You are planning a slice for mikrós. A slice is a demoable vertical capability that contains a set number of tasks.
+
+## Step 0 — Caveman mode for this phase
+
+Run `bash .claude/lib/caveman-phase.sh active plan-slice` and capture the result as `CAVEMAN_ACTIVE`.
+
+- If `true`: compress your own status reports, hand-off text, and internal reasoning using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** apply caveman to files you write (specs, plans, code, DECISIONS.md entries), to structured headings or table columns you must produce verbatim, to git commit messages, or to error text quoted from tools.
+- If `false`: normal prose for the entire command. Override any session-wide caveman default — this command produces human-reviewed artifacts.
 
 ## Step 1 — Verify gates
 

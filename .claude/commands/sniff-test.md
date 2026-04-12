@@ -8,6 +8,13 @@ argument-hint: "<slice-id or task-id, e.g. S01 or T01>"
 
 You are the verification gate. Nothing merges without passing this command.
 
+## Step 0 — Caveman mode for this phase
+
+Run `bash .claude/lib/caveman-phase.sh active sniff-test` and capture the result as `CAVEMAN_ACTIVE`.
+
+- If `true`: compress your own status reports, hand-off text, and internal reasoning using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** apply caveman to files you write (specs, plans, code, DECISIONS.md entries), to the mechanical-summary table (the ✅/❌/⚠️ rows and their column headings must stay verbatim), to the squash-merge commit message, or to error text quoted from tools.
+- If `false`: normal prose for the entire command. Override any session-wide caveman default — this command produces human-reviewed artifacts.
+
 ## Step 1 — Identify what to verify
 
 Parse the argument:

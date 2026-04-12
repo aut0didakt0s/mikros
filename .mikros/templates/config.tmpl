@@ -1,0 +1,16 @@
+# mikrós project config — shell-style key=value, one per line.
+#
+# Caveman per-phase activation. Following the Cavekit pattern, caveman
+# is applied per mikrós command phase, not session-wide, so drafting
+# and planning stay in normal prose while execution, review, and
+# compression phases get compressed.
+#
+# caveman_mode    — on|off. Project-wide master switch. Default: on.
+# caveman_phases  — comma-separated list of phases where caveman-speak
+#                   should be active when mode is on. Valid phases:
+#                   discuss, plan-slice, execute-task, sniff-test, compress.
+#                   Default excludes discuss and plan-slice because they
+#                   produce human-reviewed specs and plans.
+
+caveman_mode=on
+caveman_phases=execute-task,sniff-test,compress

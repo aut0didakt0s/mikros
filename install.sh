@@ -27,6 +27,7 @@ cp    "$HERE/.mcp.json" "$TARGET/.mcp.json"
 cp "$TARGET/.mikros/templates/STATE.md.tmpl"     "$TARGET/.mikros/STATE.md"
 cp "$TARGET/.mikros/templates/PROJECT.md.tmpl"   "$TARGET/.mikros/PROJECT.md"
 cp "$TARGET/.mikros/templates/DECISIONS.md.tmpl" "$TARGET/.mikros/DECISIONS.md"
+cp "$TARGET/.mikros/templates/config.tmpl"       "$TARGET/.mikros/config"
 
 # --- 3. Install caveman plugin ------------------------------------------
 # https://github.com/JuliusBrussee/caveman — output token reduction.

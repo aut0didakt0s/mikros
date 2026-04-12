@@ -8,6 +8,13 @@ argument-hint: "<slice-id, e.g. S01>"
 
 You run this command after `/sniff-test S##` merges a slice to main. Its job is to prevent accumulated bloat by aggressively deleting unused or over-engineered code from the slice's merged work.
 
+## Step 0 — Caveman mode for this phase
+
+Run `bash .claude/lib/caveman-phase.sh active compress` and capture the result as `CAVEMAN_ACTIVE`.
+
+- If `true`: compress your own status reports, hand-off text, and internal reasoning using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** apply caveman to files you write (specs, plans, code, DECISIONS.md entries), to the numbered approval list (structured output the user reads item-by-item), to the git commit message, or to error text quoted from tools.
+- If `false`: normal prose for the entire command. Override any session-wide caveman default — this command produces human-reviewed artifacts.
+
 ## Step 1 — Diff the slice
 
 Read `.mikros/STATE.md` to get the merge commit for the slice. Run:

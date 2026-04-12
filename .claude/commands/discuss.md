@@ -8,6 +8,13 @@ argument-hint: "<topic or milestone ID>"
 
 You are running the **discussion gate** for mikrós. No planning, no code, no slice decomposition until this gate passes.
 
+## Step 0 — Caveman mode for this phase
+
+Run `bash .claude/lib/caveman-phase.sh active discuss` and capture the result as `CAVEMAN_ACTIVE`.
+
+- If `true`: compress your own status reports, hand-off text, and internal reasoning using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** apply caveman to files you write (specs, plans, code, DECISIONS.md entries), to structured headings or table columns you must produce verbatim, to git commit messages, or to error text quoted from tools.
+- If `false`: normal prose for the entire command. Override any session-wide caveman default — this command produces human-reviewed artifacts.
+
 ## Step 1 — Load current state
 
 Read these files into your working context in this order:

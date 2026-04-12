@@ -41,4 +41,23 @@ check_command "compress"
 assert_file_contains ".claude/commands/compress.md" "simplify"      "/compress invokes simplify"
 assert_file_contains ".claude/commands/compress.md" "deletion"      "/compress runs deletion pass"
 
+# Per-phase caveman injection (Cavekit-style). Every mikrós command runs the
+# helper in a "Step 0 — Caveman mode for this phase" section and forwards
+# the decision into its own behavior. /execute-task must also propagate the
+# flag to the phase-builder subagent via CAVEMAN_MODE in the dispatch prompt.
+for cmd in discuss plan-slice execute-task sniff-test compress; do
+  file=".claude/commands/${cmd}.md"
+  assert_file_contains "$file" "## Step 0 — Caveman mode for this phase" \
+    "${cmd}: Step 0 caveman section present"
+  assert_file_contains "$file" "bash .claude/lib/caveman-phase.sh active ${cmd}" \
+    "${cmd}: invokes caveman-phase.sh with correct phase name"
+  assert_file_contains "$file" "CAVEMAN_ACTIVE" \
+    "${cmd}: captures CAVEMAN_ACTIVE result"
+done
+
+assert_file_contains ".claude/commands/execute-task.md" "CAVEMAN_MODE: on" \
+  "/execute-task forwards CAVEMAN_MODE: on to dispatch prompt"
+assert_file_contains ".claude/commands/execute-task.md" "CAVEMAN_MODE: off" \
+  "/execute-task forwards CAVEMAN_MODE: off to dispatch prompt"
+
 test_summary

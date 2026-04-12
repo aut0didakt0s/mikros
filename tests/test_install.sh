@@ -51,7 +51,13 @@ assert_file_exists "$TARGET/.claude/commands/compress.md"                       
 assert_file_exists "$TARGET/.mikros/STATE.md"                                     "STATE.md seeded"
 assert_file_exists "$TARGET/.mikros/PROJECT.md"                                   "PROJECT.md seeded"
 assert_file_exists "$TARGET/.mikros/DECISIONS.md"                                 "DECISIONS.md seeded"
+assert_file_exists "$TARGET/.mikros/config"                                       ".mikros/config seeded"
 assert_file_exists "$TARGET/.mikros/templates/T-PLAN.md.tmpl"                     "templates dir copied"
+assert_file_exists "$TARGET/.mikros/templates/config.tmpl"                        "config template copied"
+assert_file_exists "$TARGET/.claude/lib/caveman-phase.sh"                         "caveman-phase.sh helper copied"
+assert_file_contains "$TARGET/.mikros/config" "caveman_mode=on"                   "seeded config has caveman_mode"
+assert_file_contains "$TARGET/.mikros/config" "caveman_phases=execute-task,sniff-test,compress" \
+    "seeded config has default phases"
 
 # --- Assertions: caveman + docmancer install calls happened
 assert_file_contains "$WORK_BIN_LOG" "plugin marketplace add JuliusBrussee/caveman" "caveman marketplace call"

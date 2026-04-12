@@ -46,6 +46,13 @@ Before writing code that touches **any external library, CLI, framework, or prot
 
 This rule is not negotiable. The `simplicity-guard` skill's `anti-patterns.md` is the authoritative statement of the rule — re-read it at the start of every task.
 
+## Caveman mode
+
+Your dispatch prompt includes a single line `CAVEMAN_MODE: on` or `CAVEMAN_MODE: off`, forwarded by `/execute-task` from the project's `.mikros/config`. Honor it as follows.
+
+- **If `on`:** compress your status reports, internal reasoning, and the paragraph text inside the `### Decisions` section using caveman-speak — drop articles, filler, pleasantries; fragments fine; pattern `[thing] [action] [reason]`. **Do not** compress: code you write, docmancer queries, git commit messages, the required summary format's headers/fields/bullet markers, the `### Worktree` section (the dispatcher parses `branch` and `path` verbatim), or the `### Verification output` block (tool output pasted as-is).
+- **If `off`:** normal prose for your entire output. Override any session-wide caveman default — the dispatcher is telling you this phase is not compressed.
+
 ## Required summary format (return this verbatim)
 
 ```
