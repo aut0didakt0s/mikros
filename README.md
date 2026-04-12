@@ -1,64 +1,84 @@
-# mikrós
+# mikros
 
-> μικρός (ancient Greek: *small*)
+> mikros (ancient Greek: *small*)
 
-A portable Claude Code workflow template that prevents AI over-engineering and controls token cost. Drop it into any project via `install.sh` and you get five slash commands, one subagent, two hooks, one anti-bloat skill, and two installed dependencies (caveman + docmancer). No harness, no TypeScript, no build step.
+A portable workflow template for AI coding assistants that prevents over-engineering and controls token cost. Works with **Claude Code** and **Gemini CLI**. Drop it into any project via `install.sh` and you get five slash commands, one subagent, two hooks, one anti-bloat skill, and a Python state machine. No harness, no TypeScript, no build step.
 
 ## The thesis
 
-AI over-engineering is not a discipline problem. It's an absence-of-feedback problem. *"Give Claude a way to verify its output, and it will iterate until the result is great."* — Boris Cherny, 2026.
+AI over-engineering is not a discipline problem. It's an absence-of-feedback problem.
 
-mikrós gives Claude Code three kinds of feedback:
+mikros gives your AI assistant three kinds of feedback:
 
-1. **simplicity-guard** — an in-skill rule list of explicit anti-defaults (not generic "prefer simple" noise) plus a LOC budget hook that blocks edits exceeding the task budget.
-2. **caveman** — the [`JuliusBrussee/caveman`](https://github.com/JuliusBrussee/caveman) Claude Code plugin. Cuts ~75% of output tokens by making Claude speak tersely, and ~46% of input tokens via `caveman-compress` on `CLAUDE.md`.
-3. **docmancer** — the [`docmancer/docmancer`](https://github.com/docmancer/docmancer) local doc indexer. Kills hallucinated APIs by grounding Claude in real, version-specific documentation retrieved from a local vector store.
+1. **simplicity-guard** — an anti-bloat skill with explicit anti-defaults (not generic "prefer simple" noise) plus a LOC budget hook that blocks edits exceeding the task budget. Distributed as a standalone package installable by either runtime.
+2. **Hooks** — runtime-agnostic pre-tool-use and post-edit hooks that enforce lint, type-check, and LOC budget on every edit. Shared scripts work with both Claude Code and Gemini CLI.
+3. **mikros.py** — a stdlib-only Python state machine that validates workflow transitions, advances tasks atomically, and writes summaries with crash safety (temp file + mv).
+
+Optional plugins for additional feedback:
+- [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — output token reduction (~75% savings).
+- [docmancer/docmancer](https://github.com/docmancer/docmancer) — local doc retrieval to ground the AI in version-specific APIs.
+
+Both are fully optional. Their absence is a clean no-op.
 
 ## Install
 
 ```bash
-git clone https://github.com/diegomarono/mikros.git
+git clone https://github.com/aut0didakt0s/mikros.git
 cd mikros
 ./install.sh /path/to/your/project
 ```
 
-The installer copies the template into the target, seeds `.mikros/` state from templates, installs the caveman plugin and docmancer skill, and runs `/caveman:compress` on `CLAUDE.md` (preserving `CLAUDE.original.md` as the human-readable backup).
+The installer detects which runtimes are on PATH (`claude`, `gemini`, or both) and installs the appropriate config files. If neither is found, it installs both so you can pick later.
 
-## Prerequisites on the target machine
+What it does:
+- Copies `.claude/`, `.mikros/` templates, and `mikros.py` to the target
+- Installs `CLAUDE.md` and/or `GEMINI.md` (runtime-specific project context)
+- Installs `.gemini/settings.json` and `gemini-extension.json` if Gemini CLI is detected
+- Seeds `.mikros/STATE.md`, `DECISIONS.md`, and config from templates
+- Copies `simplicity-guard/` standalone directory
+- Optionally installs caveman plugin and docmancer skill if available
 
-- `claude` CLI (Claude Code)
-- `docmancer` CLI (install via `pipx install docmancer`)
+## Prerequisites
+
 - `bash` 4.0+, `git`, `python3` 3.8+, `jq`
-- `ruff` and `mypy` (required by the post-edit hook for Python files; `brew install ruff mypy`)
+- One of: `claude` CLI (Claude Code) or `gemini` CLI (Gemini CLI)
+- `ruff` and `mypy` (used by the post-edit hook for Python files)
 
 ## The workflow
 
-Every mikrós project follows the same five steps per slice:
+Every mikros project follows the same five steps per slice:
 
-1. `/discuss <topic>` — capture intent before code.
+1. `/discuss <topic>` — capture intent before code. Writes `DECISIONS.md` and milestone context.
 2. `/plan-slice <S##>` — decompose into tasks with must-haves. Enforces the iron rule.
 3. `/execute-task <T##>` — run one task in a fresh `phase-builder` subagent with pre-loaded context.
 4. `/sniff-test <id>` — mechanical must-haves check + human review gate. Squash-merges on approval.
 5. `/compress <S##>` — deletion-first compression pass after merge.
 
-State lives on disk under `.mikros/`:
+State lives on disk under `.mikros/` and is managed by `mikros.py`:
 
 ```
 .mikros/
-├── STATE.md              # current pointer, always read first
+├── STATE.md              # current pointer (milestone/slice/task/worktree)
 ├── PROJECT.md            # living project doc
-├── DECISIONS.md          # append-only ADR register
+├── DECISIONS.md          # append-only decision register
 └── plans/
     └── M001/
-        ├── ROADMAP.md
         ├── CONTEXT.md
         ├── S01-PLAN.md
         └── S01/
-            ├── T01-PLAN.md
             └── T01-SUMMARY.md
 ```
 
-Every command reads state from disk, writes atomically via `tmp file + mv`, and never keeps state in conversation. This is how mikrós survives long sessions without context rot.
+Every command reads state from disk, writes atomically via `tmp file + mv`, and never keeps state in conversation context. Each task runs in an isolated git worktree. This is how mikros survives long sessions without context rot.
+
+## simplicity-guard
+
+The anti-bloat skill is distributed as a standalone directory that works with both runtimes:
+
+- **Claude Code:** Copy `simplicity-guard/` into `.claude/skills/`
+- **Gemini CLI:** Reference `simplicity-guard/gemini-extension.json` in your settings
+
+It enforces: no enterprise patterns, no premature abstractions (three-strikes rule), no deep nesting, LOC budgets, and the iron rule.
 
 ## The iron rule
 
@@ -72,7 +92,6 @@ MIT. See `LICENSE`.
 
 ## Acknowledgements
 
-- [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — output token reduction, install dependency.
-- [docmancer/docmancer](https://github.com/docmancer/docmancer) — local doc retrieval, install dependency.
-- [gsd-build/gsd-2](https://github.com/gsd-build/gsd-2) — Milestone/Slice/Task hierarchy, iron rule, pre-loaded dispatch, must-haves format, VISION.md anti-pattern list (borrowed verbatim with attribution). MIT-licensed.
-- [shanraisshan/claude-code-best-practice](https://github.com/shanraisshan/claude-code-best-practice) — Command → Agent → Skill orchestration, CLAUDE.md monorepo loading semantics, the "< 200 lines per CLAUDE.md" constraint, the Thariq/Boris best-practice tips.
+- [gsd-build/gsd-2](https://github.com/gsd-build/gsd-2) — Milestone/Slice/Task hierarchy, iron rule, pre-loaded dispatch, must-haves format, anti-pattern list (borrowed verbatim with attribution). MIT-licensed.
+- [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — optional output token reduction plugin.
+- [docmancer/docmancer](https://github.com/docmancer/docmancer) — optional local doc retrieval plugin.

@@ -17,6 +17,4 @@ tests/*.out
 SCRATCH.md
 
 # mikrós runtime state (per-project, not shared)
-.mikros/plans/
-.mikros/STATE.md
-.mikros/DECISIONS.md
+.mikros/
