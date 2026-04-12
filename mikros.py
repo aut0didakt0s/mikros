@@ -34,29 +34,21 @@ def atomic_write(path, content):
 
 
 def parse_state():
-    """Parse STATE.md header into a dict. Returns empty dict if file missing."""
+    """Parse STATE.md into (dict, raw_text). Returns ({}, "") if missing."""
     if not STATE_PATH.exists():
-        return {}
-    text = STATE_PATH.read_text()
+        return {}, ""
+    raw = STATE_PATH.read_text()
     state = {}
-    for line in text.split("\n"):
+    for line in raw.split("\n"):
         if line.startswith("## "):
-            break  # stop at first section header
+            break
         m = re.match(r"^(\w+):\s*(.*?)\s*$", line)
         if m:
             state[m.group(1)] = m.group(2)
-    return state
-
-
-def read_state_raw():
-    """Read STATE.md as raw text. Returns empty string if missing."""
-    if not STATE_PATH.exists():
-        return ""
-    return STATE_PATH.read_text()
+    return state, raw
 
 
 def rebuild_state(state, completed_lines, notes_section):
-    """Rebuild STATE.md from parsed state dict and completed lines."""
     lines = ["# mikros state", ""]
     for key in ["active_milestone", "active_slice", "active_task",
                 "active_worktree", "active_worktree_path", "loc_budget"]:
@@ -78,7 +70,6 @@ def rebuild_state(state, completed_lines, notes_section):
 
 
 def parse_completed(raw):
-    """Extract completed task lines from STATE.md raw text."""
     lines = []
     in_completed = False
     for line in raw.split("\n"):
@@ -93,7 +84,6 @@ def parse_completed(raw):
 
 
 def parse_notes(raw):
-    """Extract the Notes section content."""
     in_notes = False
     note_lines = []
     for line in raw.split("\n"):
@@ -120,7 +110,7 @@ def cmd_gate(args):
         return 1
 
     command = args[0]
-    state = parse_state()
+    state, _ = parse_state()
 
     if command == "discuss":
         return 0
@@ -185,8 +175,7 @@ def cmd_advance(args):
         return 1
 
     task_id = args[0]
-    state = parse_state()
-    raw = read_state_raw()
+    state, raw = parse_state()
     milestone = state.get("active_milestone", "")
     slc = state.get("active_slice", "")
 
@@ -260,8 +249,7 @@ def cmd_write_summary(args):
     task_id = args[0]
     summary = sys.stdin.read()
 
-    state = parse_state()
-    raw = read_state_raw()
+    state, raw = parse_state()
     milestone = state.get("active_milestone", "")
     slc = state.get("active_slice", "")
 
@@ -302,7 +290,6 @@ def cmd_write_summary(args):
 
 
 def extract_section(text, heading):
-    """Extract content under a ### heading (partial match)."""
     lines = text.split("\n")
     capture = False
     result = []
@@ -318,13 +305,11 @@ def extract_section(text, heading):
 
 
 def is_empty_section(text):
-    """Check if section content is empty or placeholder."""
     cleaned = text.strip().strip("-").strip()
     return not cleaned or cleaned.lower() in ("(none)", "none", "n/a", "")
 
 
 def append_decisions(content):
-    """Append decision entries to DECISIONS.md."""
     if not DECISIONS_PATH.exists():
         return
     existing = DECISIONS_PATH.read_text()
@@ -339,7 +324,6 @@ def append_decisions(content):
 
 
 def append_gotchas(content):
-    """Append gotcha entries to gotchas.md."""
     gotchas_path = Path(".claude/skills/simplicity-guard/references/gotchas.md")
     if not gotchas_path.exists():
         return
