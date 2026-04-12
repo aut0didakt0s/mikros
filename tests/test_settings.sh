@@ -32,4 +32,16 @@ if ! jq -e '.hooks.PostToolUse' "$SETTINGS" >/dev/null 2>&1; then
   echo "FAIL: settings.json missing hooks.PostToolUse" >&2
 fi
 
+TESTS_RUN=$((TESTS_RUN + 1))
+if ! jq -e '.hooks.PreToolUse' "$SETTINGS" >/dev/null 2>&1; then
+  TESTS_FAILED=$((TESTS_FAILED + 1))
+  echo "FAIL: settings.json missing hooks.PreToolUse" >&2
+fi
+
+TESTS_RUN=$((TESTS_RUN + 1))
+if ! jq -e '.hooks.PreToolUse[0].hooks[0].command | test("pre-tool-use.sh")' "$SETTINGS" >/dev/null 2>&1; then
+  TESTS_FAILED=$((TESTS_FAILED + 1))
+  echo "FAIL: settings.json PreToolUse does not invoke pre-tool-use.sh" >&2
+fi
+
 test_summary

@@ -66,18 +66,6 @@ Every command reads state from disk, writes atomically via `tmp file + mv`, and 
 
 This is the single operational test for task granularity. `/plan-slice` refuses to emit a plan that violates it.
 
-## Running the test suite
-
-```bash
-bash tests/run_all.sh
-```
-
-All tests are plain bash + python3 — no bats, no pytest, no build step. Every command, skill, hook, and template has a structural test.
-
-## Design spec
-
-Full design lives at `docs/superpowers/specs/2026-04-11-mikros-workflow-design.md` (planning artefact; not shipped in this repo).
-
 ## License
 
 MIT. See `LICENSE`.

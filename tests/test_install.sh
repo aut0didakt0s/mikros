@@ -42,6 +42,7 @@ assert_file_exists "$TARGET/.claude/skills/simplicity-guard/references/anti-patt
 assert_file_exists "$TARGET/.claude/agents/phase-builder.md"                      "phase-builder.md copied"
 assert_file_exists "$TARGET/.claude/hooks/session-start.sh"                       "session-start.sh copied"
 assert_file_exists "$TARGET/.claude/hooks/post-edit.sh"                           "post-edit.sh copied"
+assert_file_exists "$TARGET/.claude/hooks/pre-tool-use.sh"                        "pre-tool-use.sh copied"
 assert_file_exists "$TARGET/.claude/commands/discuss.md"                          "/discuss command copied"
 assert_file_exists "$TARGET/.claude/commands/plan-slice.md"                       "/plan-slice command copied"
 assert_file_exists "$TARGET/.claude/commands/execute-task.md"                     "/execute-task command copied"

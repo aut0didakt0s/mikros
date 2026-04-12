@@ -69,9 +69,9 @@ Print a one-line summary:
 
 Tell the user the next command: another `/execute-task` if more tasks remain, or `/sniff-test S##` if the slice is complete.
 
-## Interactive mode required
+## Non-interactive runs
 
-The `phase-builder` subagent uses `Bash(git:*)` to commit its work inside the worktree. Running `/execute-task` in non-interactive mode (e.g., `claude -p`) with `acceptEdits` permission will block these git commands. The user must approve git operations when prompted, or run in a fully interactive `claude` session.
+The `phase-builder` subagent uses `Bash(git:*)` to commit its work inside the worktree. A PreToolUse hook (`.claude/hooks/pre-tool-use.sh`) auto-approves `git add` and `git commit` when the Bash tool call is rooted inside a linked worktree (i.e. the cwd's `.git` is a file, not a directory). This unblocks `claude -p --permission-mode acceptEdits` end-to-end without relaxing interactive safety in the main repo — the main repo's `.git` is a directory, so git commands issued there still prompt normally. The hook is surgical: only `add` and `commit`, no chaining, no `push`/`reset`/`checkout`/`rm`/`clean`.
 
 ## Error handling
 

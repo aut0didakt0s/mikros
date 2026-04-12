@@ -66,6 +66,6 @@ When you hit a failure mode while using mikrós — a prompt pattern that led Cl
 
 **Failure:** With `--permission-mode acceptEdits`, the phase-builder subagent could edit files but not run `git add` / `git commit`. Worktree had modified files but no commit. `git merge --squash <branch>` on an empty-commit branch is a no-op; squash-merge silently merges nothing.
 
-**Root cause:** `acceptEdits` only approves Write/Edit tools. Bash(git:*) requires separate approval. The interactive workflow is the expected path for end users — git approvals can be granted one-by-one.
+**Root cause:** `acceptEdits` only approves Write/Edit tools. Bash(git:*) requires separate approval. Subagents inherit the parent session's permission mode, so in a headless `claude -p` run no one is there to answer the prompt and the git call silently fails.
 
-**Rule added:** Document in `execute-task.md` that non-interactive runs with `acceptEdits` will block git commits in the phase-builder. Interactive mode is required for full end-to-end flow. Users must approve git operations when prompted.
+**Rule added:** PreToolUse hook `.claude/hooks/pre-tool-use.sh` auto-approves `git add` and `git commit` when the Bash tool call's cwd is inside a linked git worktree (cwd's `.git` is a file, not a directory). Interactive runs in the main repo keep prompting as before. Hook is surgical — rejects chaining (`;`, `&&`, `|`, backticks, `$(`) and rejects any subcommand other than `add`/`commit`. Wired in `.claude/settings.json` under `hooks.PreToolUse`. Covered by `tests/test_pre_tool_use.sh`.
