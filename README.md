@@ -17,7 +17,7 @@ mikrós gives Claude Code three kinds of feedback:
 ## Install
 
 ```bash
-git clone https://github.com/<owner>/mikros.git
+git clone https://github.com/diegomarono/mikros.git
 cd mikros
 ./install.sh /path/to/your/project
 ```
@@ -29,6 +29,7 @@ The installer copies the template into the target, seeds `.mikros/` state from t
 - `claude` CLI (Claude Code)
 - `docmancer` CLI (install via `pipx install docmancer`)
 - `bash` 4.0+, `git`, `python3` 3.8+, `jq`
+- `ruff` and `mypy` (required by the post-edit hook for Python files; `brew install ruff mypy`)
 
 ## The workflow
 
@@ -75,7 +76,7 @@ All tests are plain bash + python3 — no bats, no pytest, no build step. Every 
 
 ## Design spec
 
-Full design lives at `docs/superpowers/specs/2026-04-11-mikros-workflow-design.md` in the parent repo where this was planned.
+Full design lives at `docs/superpowers/specs/2026-04-11-mikros-workflow-design.md` (planning artefact; not shipped in this repo).
 
 ## License
 

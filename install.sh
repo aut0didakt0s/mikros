@@ -49,7 +49,7 @@ fi
 # Produces a compressed CLAUDE.md and keeps CLAUDE.original.md as the
 # human-readable backup the user edits.
 if command -v claude >/dev/null 2>&1; then
-  ( cd "$TARGET" && claude -p "/caveman:compress CLAUDE.md" )
+  ( cd "$TARGET" && claude --permission-mode acceptEdits -p "/caveman:compress CLAUDE.md" )
 fi
 
 echo

@@ -12,7 +12,7 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 # Read loc_budget from STATE.md; default 300 if not present.
-BUDGET=$(grep -E '^loc_budget:' "$STATE_FILE" 2>/dev/null | head -n 1 | awk '{print $2}')
+BUDGET=$(grep -E '^loc_budget:' "$STATE_FILE" 2>/dev/null | head -n 1 | sed 's/loc_budget:[[:space:]]*//')
 if [ -z "$BUDGET" ]; then
   BUDGET=300
 fi

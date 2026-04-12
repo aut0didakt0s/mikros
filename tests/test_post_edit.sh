@@ -36,12 +36,14 @@ mkdir -p "$WORK/.mikros"
 echo "loc_budget: 300" > "$WORK/.mikros/STATE.md"
 touch "$WORK/foo.py"
 
-# --- Test 1: No file path env var → silent exit 0
-( cd "$WORK" && PATH="$WORK/bin:$PATH" bash "$OLDPWD/$HOOK" )
-assert_exit_code 0 $? "no path env var → exit 0"
+# --- Test 1: No file path in stdin JSON → silent exit 0
+echo '{"tool_name":"Write","tool_input":{}}' \
+  | ( cd "$WORK" && PATH="$WORK/bin:$PATH" bash "$OLDPWD/$HOOK" )
+assert_exit_code 0 $? "no file_path in JSON → exit 0"
 
 # --- Test 2: Python file, ruff + mypy pass → exit 0
-( cd "$WORK" && PATH="$WORK/bin:$PATH" CLAUDE_TOOL_INPUT_file_path="foo.py" bash "$OLDPWD/$HOOK" )
+echo '{"tool_name":"Write","tool_input":{"file_path":"foo.py"}}' \
+  | ( cd "$WORK" && PATH="$WORK/bin:$PATH" bash "$OLDPWD/$HOOK" )
 assert_exit_code 0 $? "python file, clean → exit 0"
 
 # --- Test 3: Python file, ruff fails → exit 2
@@ -52,7 +54,8 @@ exit 1
 EOF
 chmod +x "$WORK/bin/ruff"
 EC=0
-( cd "$WORK" && PATH="$WORK/bin:$PATH" CLAUDE_TOOL_INPUT_file_path="foo.py" bash "$OLDPWD/$HOOK" 2>/dev/null ) || EC=$?
+echo '{"tool_name":"Write","tool_input":{"file_path":"foo.py"}}' \
+  | ( cd "$WORK" && PATH="$WORK/bin:$PATH" bash "$OLDPWD/$HOOK" 2>/dev/null ) || EC=$?
 assert_exit_code 2 "$EC" "python file, ruff fails → exit 2"
 
 # --- Test 4: Non-python file → skips lint, still runs loc-budget → exit 0
@@ -62,7 +65,8 @@ exit 0
 EOF
 chmod +x "$WORK/bin/ruff"
 touch "$WORK/foo.md"
-( cd "$WORK" && PATH="$WORK/bin:$PATH" CLAUDE_TOOL_INPUT_file_path="foo.md" bash "$OLDPWD/$HOOK" )
+echo '{"tool_name":"Write","tool_input":{"file_path":"foo.md"}}' \
+  | ( cd "$WORK" && PATH="$WORK/bin:$PATH" bash "$OLDPWD/$HOOK" )
 assert_exit_code 0 $? "markdown file → skip lint, exit 0"
 
 test_summary

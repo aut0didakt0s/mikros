@@ -58,7 +58,8 @@ The subagent will return a summary in the required format (see `.claude/agents/p
 Atomically update `.mikros/STATE.md`:
 - Mark `T##` as complete.
 - Advance `active_task` to the next task in the slice (read from `S##-PLAN.md`).
-- If this was the last task, clear `active_task` and tell the user the slice is ready for `/sniff-test`.
+- Update `loc_budget` to the next task's LOC budget (read from its entry in `S##-PLAN.md`).
+- If this was the last task, clear `active_task` and `loc_budget` and tell the user the slice is ready for `/sniff-test`.
 
 ## Step 6 — Hand off
 
@@ -67,6 +68,10 @@ Print a one-line summary:
 - ❌ if any must-have failed
 
 Tell the user the next command: another `/execute-task` if more tasks remain, or `/sniff-test S##` if the slice is complete.
+
+## Interactive mode required
+
+The `phase-builder` subagent uses `Bash(git:*)` to commit its work inside the worktree. Running `/execute-task` in non-interactive mode (e.g., `claude -p`) with `acceptEdits` permission will block these git commands. The user must approve git operations when prompted, or run in a fully interactive `claude` session.
 
 ## Error handling
 

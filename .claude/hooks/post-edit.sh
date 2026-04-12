@@ -5,16 +5,12 @@
 # loc-budget.sh. Exit 2 blocks the tool call, surfacing the error back to
 # the model as immediate feedback.
 #
-# NOTE: the exact env var name for the edited file path is spec open
-# question 7. We read from known candidates in priority order and pick the
-# first non-empty one. Collapse to the correct name once verified in the
-# self-test (plan Task 20).
+# PostToolUse hooks receive input via stdin as JSON:
+#   { "tool_name": "Write", "tool_input": { "file_path": "...", ... }, ... }
 
 set -e
 
-EDITED="${CLAUDE_HOOK_TOOL_INPUT_file_path:-}"
-[ -z "$EDITED" ] && EDITED="${CLAUDE_TOOL_INPUT_file_path:-}"
-[ -z "$EDITED" ] && EDITED="${CLAUDE_FILE_PATH:-}"
+EDITED=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
 
 # No path reported → nothing to check (some tool calls don't carry a file path)
 if [ -z "$EDITED" ]; then
