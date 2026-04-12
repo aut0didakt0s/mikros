@@ -1,6 +1,6 @@
-# mikros
+# mikrós
 
-> mikros (ancient Greek: *small*)
+> μικρός (ancient Greek: *small*)
 
 A portable workflow template for AI coding assistants that prevents over-engineering and controls token cost. Works with **Claude Code** and **Gemini CLI**. Drop it into any project via `install.sh` and you get five slash commands, one subagent, two hooks, one anti-bloat skill, and a Python state machine. No harness, no TypeScript, no build step.
 
@@ -8,13 +8,13 @@ A portable workflow template for AI coding assistants that prevents over-enginee
 
 AI over-engineering is not a discipline problem. It's an absence-of-feedback problem.
 
-mikros gives your AI assistant three kinds of feedback:
+mikrós gives your AI assistant three kinds of feedback:
 
 1. **simplicity-guard** — an anti-bloat skill with explicit anti-defaults (not generic "prefer simple" noise) plus a LOC budget hook that blocks edits exceeding the task budget. Distributed as a standalone package installable by either runtime.
 2. **Hooks** — runtime-agnostic pre-tool-use and post-edit hooks that enforce lint, type-check, and LOC budget on every edit. Shared scripts work with both Claude Code and Gemini CLI.
 3. **mikros.py** — a stdlib-only Python state machine that validates workflow transitions, advances tasks atomically, and writes summaries with crash safety (temp file + mv).
 
-Optional plugins for additional feedback:
+Optional plugins:
 - [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — output token reduction (~75% savings).
 - [docmancer/docmancer](https://github.com/docmancer/docmancer) — local doc retrieval to ground the AI in version-specific APIs.
 
@@ -46,7 +46,7 @@ What it does:
 
 ## The workflow
 
-Every mikros project follows the same five steps per slice:
+Every mikrós project follows the same five steps per slice:
 
 1. `/discuss <topic>` — capture intent before code. Writes `DECISIONS.md` and milestone context.
 2. `/plan-slice <S##>` — decompose into tasks with must-haves. Enforces the iron rule.
