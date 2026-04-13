@@ -7,7 +7,7 @@ Workflow-driven MCP server for coding and essay assistance. Built with FastMCP, 
 1. Go to [claude.ai](https://claude.ai) > Settings > Connectors > Add custom connector
 2. Paste the server URL:
    ```
-   https://mikros-mcp.fastmcp.app/mcp
+   https://Mikros.fastmcp.app/mcp
    ```
 3. Done. Try one of these prompts:
 
@@ -88,7 +88,7 @@ docker run -p 8000:8000 mikros-mcp
 3. Select your repo.
 4. Set **Entrypoint** to `server/main.py:mcp`, **Authentication** off.
 5. Click **Deploy Server** (deploys in under 60 seconds).
-6. Server URL: `https://mikros-mcp.fastmcp.app/mcp`
+6. Server URL: `https://Mikros.fastmcp.app/mcp`
 
 Auto-redeploys on push to `main`. Run `./deploy.sh --inspect` to validate before pushing.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # deploy.sh — Validate mikros MCP server for Prefect Horizon deployment.
 # Horizon settings (web UI): entrypoint=server/main.py:mcp, auth=off
-# Result URL: https://mikros-mcp.fastmcp.app/mcp
+# Result URL: https://Mikros.fastmcp.app/mcp
 # Usage: ./deploy.sh [--inspect]
 set -euo pipefail
 
@@ -27,4 +27,4 @@ echo "  1. Push to GitHub"
 echo "  2. Visit https://horizon.prefect.io, sign in with GitHub"
 echo "  3. Select repo, set entrypoint: server/main.py:mcp"
 echo "  4. Click Deploy Server"
-echo "  5. URL: https://mikros-mcp.fastmcp.app/mcp"
+echo "  5. URL: https://Mikros.fastmcp.app/mcp"

@@ -6,7 +6,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "mikros_sessions.db"
+import os
+
+_default_path = Path(__file__).parent / "mikros_sessions.db"
+# Horizon deploys to a read-only filesystem; fall back to /tmp.
+DB_PATH = _default_path if os.access(_default_path.parent, os.W_OK) else Path("/tmp/mikros_sessions.db")
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS sessions (
