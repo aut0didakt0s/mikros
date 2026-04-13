@@ -54,25 +54,13 @@ When you start a workflow, Claude walks you through each step in order. Tool res
 
 You: "I want to build a CLI that converts CSV to JSON"
 
-Claude will:
-1. **Discuss** — Ask about your goal, constraints, and what "done" looks like (one question at a time)
-2. **Plan** — Break the work into components, define file structure
-3. **Execute** — Write the code
-4. **Review** — Check for correctness and simplicity
-5. **Iterate** — Refine based on review
-6. **Deliver** — Produce the final deliverable
+Claude will guide you through all 6 coding steps — from capturing your intent to delivering the final code.
 
 ### Essay Example
 
 You: "I want to write about why remote work is better for deep work"
 
-Claude will:
-1. **Explore** — Help you brainstorm angles and gather ideas
-2. **Commit** — Lock in your thesis
-3. **Structure** — Build an outline
-4. **Draft** — Write the first draft
-5. **Revise** — Strengthen arguments and clarity
-6. **Polish** — Final editing pass
+Claude will guide you through all 6 essay steps — from exploring angles to polishing the final draft.
 
 ## Local Development
 
@@ -103,18 +91,6 @@ docker run -p 8000:8000 mikros-mcp
 6. Server URL: `https://mikros-mcp.fastmcp.app/mcp`
 
 Auto-redeploys on push to `main`. Run `./deploy.sh --inspect` to validate before pushing.
-
-## Connect to Claude
-
-Add as a custom connector in Claude:
-
-1. Go to [claude.ai](https://claude.ai) > Settings > Connectors
-2. Click "Add custom connector"
-3. Paste the URL:
-   ```
-   https://mikros-mcp.fastmcp.app/mcp
-   ```
-4. No authentication needed.
 
 ## Compliance Test Protocol (SC5)
 
