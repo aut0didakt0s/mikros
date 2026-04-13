@@ -19,11 +19,16 @@ CREATE TABLE IF NOT EXISTS sessions (
 )
 """
 
+_initialized = False
+
 
 def _connect() -> sqlite3.Connection:
+    global _initialized
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    conn.execute(_CREATE_TABLE)
+    if not _initialized:
+        conn.execute(_CREATE_TABLE)
+        _initialized = True
     return conn
 
 
@@ -33,15 +38,15 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return d
 
 
-def create_session(workflow_type: str) -> str:
+def create_session(workflow_type: str, current_step: str = "") -> str:
     """Create a new session. Returns session ID."""
     sid = uuid.uuid4().hex[:12]
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as conn:
         conn.execute(
             "INSERT INTO sessions (session_id, workflow_type, current_step, step_data, created_at, updated_at) "
-            "VALUES (?, ?, '', '{}', ?, ?)",
-            (sid, workflow_type, now, now),
+            "VALUES (?, ?, ?, '{}', ?, ?)",
+            (sid, workflow_type, current_step, now, now),
         )
     return sid
 
@@ -60,8 +65,6 @@ def update_session(session_id: str, **kwargs: object) -> None:
 
     Accepted kwargs: current_step (str), step_data (dict).
     """
-    # Verify session exists first
-    get_session(session_id)
     sets, vals = [], []
     if "current_step" in kwargs:
         sets.append("current_step = ?")
@@ -75,11 +78,6 @@ def update_session(session_id: str, **kwargs: object) -> None:
     vals.append(datetime.now(timezone.utc).isoformat())
     vals.append(session_id)
     with _connect() as conn:
-        conn.execute(f"UPDATE sessions SET {', '.join(sets)} WHERE session_id = ?", vals)
-
-
-def list_sessions() -> list[dict]:
-    """List all sessions, newest first."""
-    with _connect() as conn:
-        rows = conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
-    return [_row_to_dict(r) for r in rows]
+        cursor = conn.execute(f"UPDATE sessions SET {', '.join(sets)} WHERE session_id = ?", vals)
+        if cursor.rowcount == 0:
+            raise KeyError(f"Session not found: {session_id}")

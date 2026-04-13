@@ -2,21 +2,34 @@
 
 from server import state
 
+_COMPLETE = "__complete__"
+
+_DO_NOT_RULES = [
+    "Do NOT skip ahead to later steps.",
+    "Do NOT produce final artifacts yet.",
+    "Do NOT ask multiple questions at once.",
+    "Do NOT proceed until all gates for this step are satisfied.",
+]
+
 
 def _find_step(workflow, step_id):
-    """Find a step dict in a workflow by id."""
-    for step in workflow["steps"]:
-        if step["id"] == step_id:
-            return step
-    return None
-
-
-def _step_index(workflow, step_id):
-    """Return 0-based index of step_id in workflow, or -1."""
+    """Find (index, step_dict) in a workflow by id. Returns (-1, None) if missing."""
     for i, step in enumerate(workflow["steps"]):
         if step["id"] == step_id:
-            return i
-    return -1
+            return i, step
+    return -1, None
+
+
+def _resolve_session(session_id, workflows):
+    """Look up session and its workflow. Returns (session, wf) or (None, error_dict)."""
+    try:
+        session = state.get_session(session_id)
+    except KeyError as e:
+        return None, {"error": str(e), "session_id": session_id}
+    wf = workflows.get(session["workflow_type"])
+    if not wf:
+        return None, {"error": f"Workflow '{session['workflow_type']}' not loaded", "session_id": session_id}
+    return (session, wf), None
 
 
 def register_tools(mcp, workflows):
@@ -32,21 +45,15 @@ def register_tools(mcp, workflows):
             }
 
         wf = workflows[workflow_type]
-        sid = state.create_session(workflow_type)
         first_step = wf["steps"][0]
-        state.update_session(sid, current_step=first_step["id"])
+        sid = state.create_session(workflow_type, current_step=first_step["id"])
 
         return {
             "session_id": sid,
             "workflow_type": workflow_type,
             "current_step": {"id": first_step["id"], "title": first_step["title"]},
             "directive": first_step["directive_template"],
-            "do_not": [
-                "Do NOT skip ahead to later steps.",
-                "Do NOT produce final artifacts yet.",
-                "Do NOT ask multiple questions at once.",
-                "Do NOT proceed until all gates for this step are satisfied.",
-            ],
+            "do_not": _DO_NOT_RULES,
             "gates": first_step["gates"],
             "context": context,
         }
@@ -54,19 +61,14 @@ def register_tools(mcp, workflows):
     @mcp.tool()
     def get_state(session_id: str) -> dict:
         """Get current session state: step, progress, and what's pending."""
-        try:
-            session = state.get_session(session_id)
-        except KeyError as e:
-            return {"error": str(e), "session_id": session_id}
-
-        wf = workflows.get(session["workflow_type"])
-        if not wf:
-            return {"error": f"Workflow '{session['workflow_type']}' not loaded", "session_id": session_id}
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, wf = resolved
 
         steps = wf["steps"]
-        idx = _step_index(wf, session["current_step"])
-        current = steps[idx] if idx >= 0 else None
-        pending = [s["title"] for s in steps[idx + 1 :]] if idx >= 0 else []
+        idx, current = _find_step(wf, session["current_step"])
+        pending = [s["title"] for s in steps[idx + 1:]] if idx >= 0 else []
 
         return {
             "session_id": session_id,
@@ -80,16 +82,12 @@ def register_tools(mcp, workflows):
     @mcp.tool()
     def get_guidelines(session_id: str) -> dict:
         """Get anti-patterns and gates for the current step."""
-        try:
-            session = state.get_session(session_id)
-        except KeyError as e:
-            return {"error": str(e), "session_id": session_id}
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, wf = resolved
 
-        wf = workflows.get(session["workflow_type"])
-        if not wf:
-            return {"error": f"Workflow '{session['workflow_type']}' not loaded", "session_id": session_id}
-
-        step = _find_step(wf, session["current_step"])
+        _, step = _find_step(wf, session["current_step"])
         if not step:
             return {"error": f"Step '{session['current_step']}' not found in workflow", "session_id": session_id}
 
@@ -103,17 +101,13 @@ def register_tools(mcp, workflows):
     @mcp.tool()
     def submit_step(session_id: str, step_id: str, content: str) -> dict:
         """Submit content for the current step. Enforces ordering — no skips, no backwards."""
-        try:
-            session = state.get_session(session_id)
-        except KeyError as e:
-            return {"error": str(e), "session_id": session_id}
-
-        wf = workflows.get(session["workflow_type"])
-        if not wf:
-            return {"error": f"Workflow '{session['workflow_type']}' not loaded", "session_id": session_id}
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, wf = resolved
 
         current = session["current_step"]
-        if current == "__complete__":
+        if current == _COMPLETE:
             return {
                 "error": "Workflow already complete. Call generate_artifact to get final output.",
                 "session_id": session_id,
@@ -127,19 +121,18 @@ def register_tools(mcp, workflows):
                 "submitted_step": step_id,
             }
 
-        step = _find_step(wf, step_id)
         steps = wf["steps"]
-        idx = _step_index(wf, step_id)
+        idx, step = _find_step(wf, step_id)
 
         # Store content
         step_data = session["step_data"]
         step_data[step_id] = content
 
         is_last = idx == len(steps) - 1
-        next_step_id = "__complete__" if is_last else steps[idx + 1]["id"]
+        next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
         state.update_session(session_id, current_step=next_step_id, step_data=step_data)
 
-        result = {
+        result: dict = {
             "session_id": session_id,
             "submitted": {"id": step["id"], "title": step["title"]},
             "progress": f"step {idx + 1} of {len(steps)} complete",
@@ -152,12 +145,7 @@ def register_tools(mcp, workflows):
             nxt = steps[idx + 1]
             result["next_step"] = {"id": nxt["id"], "title": nxt["title"]}
             result["directive"] = nxt["directive_template"]
-            result["do_not"] = [
-                "Do NOT skip ahead to later steps.",
-                "Do NOT produce final artifacts yet.",
-                "Do NOT ask multiple questions at once.",
-                "Do NOT proceed until all gates for this step are satisfied.",
-            ]
+            result["do_not"] = _DO_NOT_RULES
             result["gates"] = nxt["gates"]
 
         return result
@@ -165,17 +153,13 @@ def register_tools(mcp, workflows):
     @mcp.tool()
     def generate_artifact(session_id: str, output_format: str = "auto") -> dict:
         """Generate final artifact from completed workflow. Rejects if workflow is not complete."""
-        try:
-            session = state.get_session(session_id)
-        except KeyError as e:
-            return {"error": str(e), "session_id": session_id}
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, wf = resolved
 
-        wf = workflows.get(session["workflow_type"])
-        if not wf:
-            return {"error": f"Workflow '{session['workflow_type']}' not loaded", "session_id": session_id}
-
-        if session["current_step"] != "__complete__":
-            idx = _step_index(wf, session["current_step"])
+        if session["current_step"] != _COMPLETE:
+            idx, _ = _find_step(wf, session["current_step"])
             remaining = [s["title"] for s in wf["steps"][idx:]]
             return {
                 "error": "Workflow not complete. Finish all steps first.",
