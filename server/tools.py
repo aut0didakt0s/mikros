@@ -1,8 +1,7 @@
 """MCP tool functions for mikros workflow engine."""
 
 from server import state
-
-_COMPLETE = "__complete__"
+from server.state import COMPLETE as _COMPLETE
 
 _DO_NOT_RULES = [
     "Do NOT skip ahead to later steps.",

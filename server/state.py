@@ -3,6 +3,8 @@
 import uuid
 from datetime import datetime, timezone
 
+COMPLETE = "__complete__"
+
 _sessions: dict[str, dict] = {}
 
 
@@ -47,7 +49,7 @@ def list_sessions() -> list[dict]:
     """Return all sessions with status field (active/completed)."""
     result = []
     for s in _sessions.values():
-        status = "completed" if s["current_step"] == "__complete__" else "active"
+        status = "completed" if s["current_step"] == COMPLETE else "active"
         result.append({
             "session_id": s["session_id"],
             "workflow_type": s["workflow_type"],
@@ -57,6 +59,11 @@ def list_sessions() -> list[dict]:
             "updated_at": s["updated_at"],
         })
     return result
+
+
+def clear_sessions() -> None:
+    """Remove all sessions. Used by tests."""
+    _sessions.clear()
 
 
 def delete_session(session_id: str) -> dict:

@@ -7,7 +7,7 @@ STEPS = ["discuss", "plan", "execute", "review", "iterate", "deliver"]
 
 
 def _clear_sessions():
-    state._sessions.clear()
+    state.clear_sessions()
 
 
 class TestListSessions:
