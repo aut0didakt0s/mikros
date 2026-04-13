@@ -75,11 +75,6 @@ def invalidate_steps_after(session_id: str, step_ids: list[str]) -> None:
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
 
 
-def get_retry_count(session_id: str, step_id: str) -> int:
-    """Return current retry count for a step. 0 if never retried."""
-    return get_session(session_id)["retry_counts"].get(step_id, 0)
-
-
 def increment_retry(session_id: str, step_id: str) -> int:
     """Increment and return retry count for a step."""
     session = get_session(session_id)
