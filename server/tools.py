@@ -154,8 +154,33 @@ def register_tools(mcp, workflows):
         return result
 
     @mcp.tool()
+    def list_sessions() -> dict:
+        """List all sessions with their status (active/completed)."""
+        return {"sessions": state.list_sessions()}
+
+    @mcp.tool()
+    def delete_session(session_id: str) -> dict:
+        """Delete a session regardless of state. Returns what was deleted."""
+        try:
+            deleted = state.delete_session(session_id)
+        except KeyError as e:
+            return {"error": str(e), "session_id": session_id}
+        return {
+            "session_id": deleted["session_id"],
+            "workflow_type": deleted["workflow_type"],
+            "current_step": deleted["current_step"],
+            "completed": deleted["current_step"] == _COMPLETE,
+        }
+
+    @mcp.tool()
     def generate_artifact(session_id: str, output_format: str = "auto") -> dict:
-        """Generate final artifact from completed workflow. Rejects if workflow is not complete."""
+        """Generate final artifact from completed workflow. Rejects if workflow is not complete.
+
+        output_format controls the shape of the returned artifact:
+        - "auto" (default): uses the workflow's output_format field; falls back to "text" if not set.
+        - "text": joins all step contents into a single string separated by double newlines.
+        - "structured_code": returns a list of dicts, each with keys step_id, title, and content.
+        """
         resolved, err = _resolve_session(session_id, workflows)
         if err:
             return err

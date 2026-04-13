@@ -1,0 +1,110 @@
+name: blog
+description: Guided blog post workflow — from angle to publication-ready post.
+output_format: text
+
+steps:
+  - id: angle
+    title: Find the Angle and Hook
+    directive_template: >-
+      Help the user find a compelling angle for their blog post.
+      Explore what makes this topic interesting, timely, or surprising.
+      Identify a hook that would make a reader stop scrolling and start reading.
+      Do NOT settle on the first angle — explore at least two before committing.
+      Do NOT let the user skip the hook — every post needs a reason to read it now.
+      When the user has a sharp angle and a hook, submit this step.
+    gates:
+      - User has explored at least two possible angles
+      - A specific hook is identified
+    anti_patterns:
+      - Settling on the first angle without exploring alternatives
+      - Skipping the hook
+
+  - id: audience
+    title: Define the Audience and Takeaway
+    directive_template: >-
+      Help the user define who this post is for and what the reader should take away.
+      The audience should be specific enough to guide tone and depth decisions.
+      The takeaway should be one concrete thing the reader can think, feel, or do differently.
+      Do NOT accept "everyone" as an audience — specificity drives clarity.
+      Do NOT allow vague takeaways like "understand the topic better."
+      Do NOT submit until the user confirms both audience and takeaway.
+    gates:
+      - Audience is specific and named
+      - Takeaway is concrete and actionable
+      - User has confirmed both
+    anti_patterns:
+      - Accepting a vague audience
+      - Allowing a fuzzy takeaway
+      - Submitting without user confirmation
+
+  - id: outline
+    title: Outline the Structure
+    directive_template: >-
+      Build a section-by-section outline for the post.
+      Each section should serve the hook and drive toward the takeaway.
+      Include the opening hook, key sections, and the closing call-to-action or punchline.
+      Do NOT write full prose — outlines only.
+      Do NOT include sections that do not serve the angle or takeaway.
+      Do NOT submit until the user confirms the outline.
+    gates:
+      - Each section has a clear purpose
+      - Opening hook and closing are planned
+      - User has confirmed the outline
+    anti_patterns:
+      - Writing prose instead of outlining
+      - Including filler sections
+      - Submitting without user confirmation
+
+  - id: draft
+    title: Write the First Draft
+    directive_template: >-
+      Write the full blog post following the outline. Prioritize getting ideas down over polish.
+      Write in the tone appropriate for the defined audience.
+      Present the complete draft to the user before submitting.
+      Do NOT stop to edit sentences for style while drafting.
+      Do NOT leave placeholder sections — write through every part of the outline.
+      Do NOT submit until the user has read the draft and confirmed.
+    gates:
+      - Every outlined section has been drafted
+      - Draft is complete end-to-end
+      - User has reviewed the draft
+    anti_patterns:
+      - Editing while drafting
+      - Leaving placeholder sections
+      - Submitting without showing the draft
+
+  - id: revise
+    title: Revise for Engagement and Clarity
+    directive_template: >-
+      Review the draft for reader engagement: is the hook strong, do sections flow, is the takeaway clear?
+      Cut or tighten anything that loses the reader. Strengthen transitions between sections.
+      Present the revised version to the user with a summary of what changed and why.
+      Do NOT focus on grammar or word choice yet — engagement and clarity come first.
+      Do NOT add new sections that were not in the outline without revisiting the structure.
+      Do NOT submit until the user confirms the revision.
+    gates:
+      - Hook is strong and engaging
+      - Sections flow logically toward the takeaway
+      - User has confirmed the revision
+    anti_patterns:
+      - Line-editing before structural revision
+      - Adding unplanned sections without updating outline
+      - Submitting without user confirmation
+
+  - id: polish
+    title: Polish for Publication
+    directive_template: >-
+      Edit for clarity, concision, and voice. Fix grammar, improve transitions, tighten sentences.
+      Ensure the opening hook lands and the closing leaves an impression.
+      Present the polished post to the user for final approval.
+      Do NOT change the angle or structure at this stage.
+      Do NOT add new content — polish only what exists.
+      Do NOT submit until the user gives final approval.
+    gates:
+      - Prose is clear and concise
+      - Voice is consistent throughout
+      - User has given final approval
+    anti_patterns:
+      - Changing the angle during polish
+      - Adding new content instead of polishing
+      - Submitting without user approval

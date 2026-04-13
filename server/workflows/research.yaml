@@ -1,0 +1,98 @@
+name: research
+description: Guided research synthesis — from question to defensible findings.
+output_format: text
+
+steps:
+  - id: frame
+    title: Frame the Research Question
+    directive_template: >-
+      Help the user sharpen their research question into something answerable.
+      Identify what they already know, what they need to find out, and what scope is realistic.
+      Do NOT accept a vague topic as a research question — it must be specific and bounded.
+      Do NOT let the user skip defining what counts as a good answer.
+      When the user has a clear, scoped research question, submit this step.
+    gates:
+      - Research question is specific and bounded
+      - User has defined what a satisfactory answer looks like
+    anti_patterns:
+      - Accepting a vague topic instead of a specific question
+      - Skipping scope definition
+
+  - id: gather
+    title: Gather Sources and Evidence
+    directive_template: >-
+      Help the user identify and collect relevant sources for their research question.
+      Encourage variety — primary sources, secondary analyses, opposing viewpoints.
+      Do NOT rely on a single source or perspective.
+      Do NOT accept sources without assessing their relevance to the research question.
+      When the user has a substantive body of evidence, submit this step.
+    gates:
+      - Multiple sources identified covering different perspectives
+      - Each source is relevant to the research question
+    anti_patterns:
+      - Relying on a single source
+      - Accepting irrelevant sources without challenge
+
+  - id: evaluate
+    title: Evaluate the Evidence
+    directive_template: >-
+      Help the user critically assess each source for credibility, bias, and strength of evidence.
+      Flag contradictions between sources and identify gaps in coverage.
+      Do NOT treat all sources as equally reliable.
+      Do NOT ignore contradictions — surface them explicitly.
+      When the user has a clear picture of evidence quality, submit this step.
+    gates:
+      - Each source has been assessed for credibility and bias
+      - Contradictions and gaps are explicitly identified
+    anti_patterns:
+      - Treating all sources as equally reliable
+      - Ignoring contradictions between sources
+
+  - id: synthesize
+    title: Synthesize Findings
+    directive_template: >-
+      Help the user weave the evaluated evidence into coherent findings that answer the research question.
+      Group related evidence, identify patterns, and draw conclusions supported by the sources.
+      Do NOT present findings that lack evidential support.
+      Do NOT omit important caveats or limitations.
+      When the user has clear, supported findings, submit this step.
+    gates:
+      - Findings directly answer the research question
+      - Each finding is supported by evaluated evidence
+      - Limitations are acknowledged
+    anti_patterns:
+      - Presenting unsupported conclusions
+      - Omitting caveats or limitations
+
+  - id: structure
+    title: Structure the Output
+    directive_template: >-
+      Help the user organize their synthesis into a clear, readable structure.
+      Each section should serve the reader — no filler. Present the outline for confirmation.
+      Do NOT write full prose yet — structure and headings only.
+      Do NOT include sections that do not serve the research question.
+      Do NOT submit until the user confirms the structure.
+    gates:
+      - Each section has a clear purpose tied to the research question
+      - Logical flow from section to section
+      - User has confirmed the structure
+    anti_patterns:
+      - Including filler sections
+      - Writing prose instead of outlining
+
+  - id: refine
+    title: Refine and Polish
+    directive_template: >-
+      Write and then refine the full research synthesis following the confirmed structure.
+      Ensure claims match evidence, transitions are smooth, and the writing is clear.
+      Present the final synthesis to the user for approval.
+      Do NOT introduce new findings at this stage.
+      Do NOT weaken supported claims without reason.
+      Do NOT submit until the user gives final approval.
+    gates:
+      - Prose is clear and concise
+      - All claims match the evaluated evidence
+      - User has given final approval
+    anti_patterns:
+      - Introducing new findings during polish
+      - Weakening supported claims without justification

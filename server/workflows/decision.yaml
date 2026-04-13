@@ -1,0 +1,95 @@
+name: decision
+description: Structured decision framework — from framing to documented rationale.
+output_format: text
+
+steps:
+  - id: frame
+    title: Frame the Decision
+    directive_template: >-
+      Help the user clearly articulate the decision they need to make.
+      Clarify scope, timeline, and who is affected by the outcome.
+      Do NOT jump to listing options before the decision is framed.
+      Do NOT accept vague framing like "figure out what to do" — push for specifics.
+      When the decision statement is crisp and bounded, submit this step.
+    gates:
+      - Decision statement is specific and bounded
+      - Scope and timeline are identified
+    anti_patterns:
+      - Jumping to options before framing
+      - Accepting vague problem statements
+
+  - id: options
+    title: Identify Options
+    directive_template: >-
+      Help the user brainstorm all viable options, including doing nothing.
+      Push beyond the obvious first two choices — there are almost always more.
+      Do NOT evaluate or rank options yet — generation before judgment.
+      Do NOT dismiss any option prematurely during brainstorming.
+      When the user confirms the list is complete, submit this step.
+    gates:
+      - At least three distinct options are listed
+      - Status quo or do-nothing option is explicitly considered
+    anti_patterns:
+      - Evaluating options during brainstorming
+      - Settling on only two options
+
+  - id: tradeoffs
+    title: Evaluate Trade-offs
+    directive_template: >-
+      For each option, identify the key trade-offs: costs, benefits, risks, and reversibility.
+      Use the user's stated priorities to weight what matters most.
+      Do NOT treat all criteria as equally important — force-rank them.
+      Do NOT hide downsides of the user's preferred option.
+      When trade-offs are mapped for every option, submit this step.
+    gates:
+      - Each option has identified costs, benefits, and risks
+      - Criteria are prioritized, not treated equally
+    anti_patterns:
+      - Treating all criteria as equal weight
+      - Hiding downsides of favored options
+
+  - id: stress_test
+    title: Stress-Test Assumptions
+    directive_template: >-
+      Challenge the assumptions behind each option and the trade-off analysis.
+      Ask "what would have to be true" for each option to succeed or fail.
+      Do NOT accept the analysis at face value — play devil's advocate.
+      Do NOT skip options the user has already dismissed — revisit them briefly.
+      When key assumptions are surfaced and tested, submit this step.
+    gates:
+      - Key assumptions behind top options are stated explicitly
+      - At least one assumption per option has been challenged
+    anti_patterns:
+      - Accepting analysis without challenge
+      - Skipping dismissed options entirely
+
+  - id: decide
+    title: Make the Call
+    directive_template: >-
+      Help the user commit to a decision based on the analysis so far.
+      State the chosen option clearly and the primary reasons for choosing it.
+      Do NOT leave the decision ambiguous or hedge with "it depends."
+      Do NOT reopen the full analysis — the time for that has passed.
+      When the user has committed to a clear choice, submit this step.
+    gates:
+      - A single option is chosen
+      - User has explicitly committed to the decision
+    anti_patterns:
+      - Leaving the decision ambiguous
+      - Reopening full analysis at decision time
+
+  - id: document
+    title: Document the Rationale
+    directive_template: >-
+      Write a concise decision record: what was decided, why, what was rejected, and under what conditions to revisit.
+      This record should be useful to someone encountering it six months from now.
+      Do NOT omit rejected alternatives — future readers need to know what was considered.
+      Do NOT write more than one page — brevity is a feature.
+      When the user approves the decision document, submit this step.
+    gates:
+      - Decision and rationale are clearly stated
+      - Rejected alternatives are documented
+      - Conditions for revisiting are specified
+    anti_patterns:
+      - Omitting rejected alternatives
+      - Writing an excessively long document
