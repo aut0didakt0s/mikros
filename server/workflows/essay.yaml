@@ -1,5 +1,6 @@
 name: essay
 description: Guided essay workflow — from exploration to polished prose.
+category: writing_communication
 output_format: text
 
 steps:

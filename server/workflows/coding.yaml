@@ -1,5 +1,6 @@
 name: coding
 description: Guided coding workflow — from intent capture to delivered artifacts.
+category: professional
 output_format: structured_code
 
 steps:

@@ -1,5 +1,6 @@
 name: research
 description: Guided research synthesis — from question to defensible findings.
+category: analysis_decision
 output_format: text
 
 steps:

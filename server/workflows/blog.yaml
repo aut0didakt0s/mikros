@@ -1,5 +1,6 @@
 name: blog
 description: Guided blog post workflow — from angle to publication-ready post.
+category: writing_communication
 output_format: text
 
 steps:

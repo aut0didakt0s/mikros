@@ -38,6 +38,27 @@ def register_tools(mcp, workflows):
     """Register workflow tools on the FastMCP app."""
 
     @mcp.tool()
+    def list_workflows(category: str = "") -> dict:
+        """List available workflow types, optionally filtered by category.
+
+        Categories: writing_communication, analysis_decision, planning_strategy,
+        learning_development, professional, creative.
+        Pass empty string or omit to list all.
+        """
+        items = []
+        for name, wf in workflows.items():
+            wf_cat = wf.get("category", "")
+            if category and wf_cat != category:
+                continue
+            items.append({
+                "name": name,
+                "description": wf.get("description", ""),
+                "category": wf_cat,
+                "steps": len(wf["steps"]),
+            })
+        return {"workflows": items, "total": len(items)}
+
+    @mcp.tool()
     def start_workflow(workflow_type: str, context: str) -> dict:
         """Start a new workflow session. Returns the first step's directive."""
         if workflow_type not in workflows:

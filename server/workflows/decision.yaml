@@ -1,5 +1,6 @@
 name: decision
 description: Structured decision framework — from framing to documented rationale.
+category: analysis_decision
 output_format: text
 
 steps:
