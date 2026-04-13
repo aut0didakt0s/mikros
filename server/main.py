@@ -2,8 +2,8 @@
 
 from pathlib import Path
 from fastmcp import FastMCP
-from server.schema import load_workflow
-from server.tools import register_tools
+from .schema import load_workflow
+from .tools import register_tools
 
 mcp = FastMCP("mikros")
 
