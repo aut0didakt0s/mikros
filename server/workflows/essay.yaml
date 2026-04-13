@@ -1,0 +1,94 @@
+name: essay
+description: Guided essay workflow — from exploration to polished prose.
+output_format: text
+
+steps:
+  - id: explore
+    title: Explore and Invent
+    directive_template: >-
+      Help the user explore their topic through open-ended questions.
+      Surface what they already know, what interests them, and what tensions exist.
+      Do NOT propose a thesis yet — invention precedes commitment.
+      Do NOT narrow the topic before the user has explored at least two angles.
+      When the user has a rich understanding of the territory, submit this step.
+    gates:
+      - User has explored at least two angles of the topic
+      - Key tensions or questions are identified
+    anti_patterns:
+      - Proposing a thesis before exploration
+      - Narrowing too early
+
+  - id: commit
+    title: Commit to a Thesis
+    directive_template: >-
+      Help the user distill their exploration into a single, arguable thesis statement.
+      The thesis must be specific enough to be wrong — vague claims are not theses.
+      Do NOT accept a topic as a thesis (e.g., "climate change" is a topic, not a thesis).
+      Do NOT allow more than one main claim — one thesis, one essay.
+      Submit when the user has a clear, falsifiable thesis statement.
+    gates:
+      - Thesis is a specific, arguable claim
+      - User has committed to the thesis
+    anti_patterns:
+      - Accepting a topic instead of a thesis
+      - Allowing multiple competing claims
+
+  - id: structure
+    title: Arrange the Argument
+    directive_template: >-
+      Outline the essay's structure: what each section argues and how it supports the thesis.
+      Each section should have a clear purpose — no filler sections.
+      Do NOT write full prose yet — outlines only.
+      Do NOT include sections that do not serve the thesis.
+      Submit when the outline covers the full argument with logical flow.
+    gates:
+      - Each section has a clear purpose tied to the thesis
+      - Logical flow from section to section is evident
+    anti_patterns:
+      - Including filler sections
+      - Writing prose instead of outlining
+
+  - id: draft
+    title: Write the First Draft
+    directive_template: >-
+      Write the full essay draft following the outline. Prioritize getting ideas down over polish.
+      Embrace imperfection — a messy complete draft beats a perfect incomplete one.
+      Do NOT stop to edit sentences for style while drafting.
+      Do NOT leave placeholder sections — write through every part of the outline.
+      Submit when a complete first draft exists covering every outlined section.
+    gates:
+      - Every outlined section has been drafted
+      - Draft is complete end-to-end
+    anti_patterns:
+      - Editing while drafting
+      - Leaving placeholder sections
+
+  - id: revise
+    title: Substantive Revision
+    directive_template: >-
+      Review the draft for argument strength, evidence gaps, and structural problems.
+      Cut, reorder, or rewrite sections that do not earn their place.
+      Do NOT focus on grammar or word choice yet — structure and argument come first.
+      Do NOT add new arguments that were not in the outline without revisiting the structure.
+      Submit when the argument is sound and every section pulls its weight.
+    gates:
+      - Argument is logically sound throughout
+      - Weak sections are cut or strengthened
+    anti_patterns:
+      - Line-editing before structural revision
+      - Adding unplanned arguments without updating structure
+
+  - id: polish
+    title: Line Editing and Polish
+    directive_template: >-
+      Edit for clarity, concision, and style. Fix grammar, improve transitions, tighten sentences.
+      Read each paragraph aloud (mentally) — if it stumbles, rewrite it.
+      Do NOT change the argument or structure at this stage.
+      Do NOT add new content — polish only what exists.
+      Submit when the essay reads cleanly from start to finish.
+    gates:
+      - Prose is clear and concise
+      - Transitions between sections are smooth
+    anti_patterns:
+      - Changing the argument during polish
+      - Adding new content instead of polishing

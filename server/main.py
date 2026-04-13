@@ -21,4 +21,5 @@ if not WORKFLOWS:
 register_tools(mcp, WORKFLOWS)
 
 if __name__ == "__main__":
-    mcp.run()
+    # FastMCP reads FASTMCP_HOST / FASTMCP_PORT from env (see server/config.py).
+    mcp.run(transport="streamable-http")  # type: ignore[arg-type]
