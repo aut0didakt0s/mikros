@@ -23,71 +23,86 @@ steps:
     directive_template: >-
       Break the work into components and define the file structure.
       List each component with a one-line description of its responsibility.
+      Present the plan to the user and ask if they want to change anything.
       Do NOT write any implementation code yet.
       Do NOT create abstractions until you have three concrete uses.
-      Submit when all components are identified and files are mapped.
+      Do NOT submit this step until the user confirms the plan.
     gates:
       - Components are identified
       - File structure is defined
+      - User has confirmed the plan
     anti_patterns:
       - Over-engineering the plan
       - Creating abstractions before three uses
+      - Submitting without user confirmation
 
   - id: execute
     title: Produce Code Artifacts
     directive_template: >-
       Implement each component from the plan, one at a time.
       Write the simplest code that satisfies the requirements — boring beats clever.
+      Present the complete implementation to the user before submitting.
       Do NOT add features not in the plan.
       Do NOT introduce dependencies unless explicitly required.
-      Submit when all planned components are implemented and code runs without syntax errors.
+      Do NOT submit until the user has seen the code and confirmed.
     gates:
       - All planned components are implemented
       - Code runs without syntax errors
+      - User has reviewed the implementation
     anti_patterns:
       - Gold-plating beyond requirements
       - Introducing unneeded dependencies
+      - Submitting without showing the code to the user
 
   - id: review
     title: Check Against Requirements
     directive_template: >-
       Walk through each requirement from the discuss step and verify the code satisfies it.
       List every requirement with a pass/fail and note any gaps found.
+      Present the review checklist to the user and ask if they see additional gaps.
       Do NOT fix issues yet — only identify them.
       Do NOT add new requirements that were not in the original intent.
-      Submit when every requirement is mapped to code and all gaps are listed.
+      Do NOT submit until the user confirms the review is complete.
     gates:
       - Each requirement is mapped to code
       - Gaps are identified
+      - User has confirmed the review
     anti_patterns:
       - Rubber-stamping without checking
       - Scope creep during review
+      - Skipping user confirmation
 
   - id: iterate
     title: Fix Issues
     directive_template: >-
       Address each gap identified in the review step with the minimal fix needed.
+      Present the fixes to the user and explain what changed.
       Do NOT rewrite working code — fix only what is broken or missing.
       Do NOT introduce changes beyond what the review identified.
-      Submit when all review findings are resolved and no new issues are introduced.
+      Do NOT submit until the user confirms the fixes are acceptable.
     gates:
       - All review findings are addressed
       - No new issues introduced
+      - User has confirmed the fixes
     anti_patterns:
       - Rewriting instead of fixing
       - Ignoring edge cases found in review
+      - Submitting without user review of fixes
 
   - id: deliver
     title: Final Output
     directive_template: >-
       Format all artifacts for user consumption: complete files, clear names, ready to use.
       Verify every artifact from the plan is present in the output.
+      Present the final deliverable to the user and confirm it matches what they asked for.
       Do NOT skip the final check — confirm the output matches what the user asked for.
       Do NOT omit any files or components.
-      Submit when the output is complete and formatted.
+      Do NOT submit until the user confirms the delivery is complete.
     gates:
       - Output is formatted for user consumption
       - All artifacts are present
+      - User has confirmed the final output
     anti_patterns:
       - Delivering without final check
       - Missing files from output
+      - Submitting without user confirmation
