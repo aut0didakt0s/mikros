@@ -12,6 +12,7 @@ if _app_root not in sys.path:
 
 from fastmcp import FastMCP  # noqa: E402
 from server.schema import load_workflow  # noqa: E402
+from server import state  # noqa: E402
 from server.tools import register_tools  # noqa: E402
 
 mcp = FastMCP("mikros")
@@ -27,6 +28,7 @@ for yaml_path in WORKFLOWS_DIR.glob("*.yaml"):
 if not WORKFLOWS:
     raise RuntimeError(f"No workflow YAML files found in {WORKFLOWS_DIR}")
 
+state.expire_sessions(24)
 register_tools(mcp, WORKFLOWS)
 
 if __name__ == "__main__":

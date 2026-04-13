@@ -1,6 +1,6 @@
 # mikros MCP Server
 
-Workflow-driven MCP server for coding and essay assistance. Built with FastMCP, deployed to Prefect Horizon.
+Workflow-driven MCP server for structured workflows. Built with FastMCP, deployed to Prefect Horizon.
 
 ## Quick Start (2 minutes)
 
@@ -19,16 +19,19 @@ Claude will guide you through a structured workflow, one step at a time.
 
 ## How It Works
 
-The server exposes 5 MCP tools: `start_workflow`, `submit_step`, `get_state`, `get_guidelines`, `generate_artifact`.
+The server exposes 8 MCP tools: `list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `list_sessions`, `delete_session`, `generate_artifact`.
 
 When you start a workflow, Claude walks you through each step in order. Tool responses include explicit directives telling Claude what to do (and what NOT to do) at each step.
 
 ## Workflows
 
-| Workflow | Steps | Output |
-|----------|-------|--------|
-| coding   | 6 (discuss, plan, execute, review, iterate, deliver) | code |
-| essay    | 6 (explore, commit, structure, draft, revise, polish) | text |
+| Workflow | Category | Steps | Output |
+|----------|----------|-------|--------|
+| coding   | professional | 6 (discuss, plan, execute, review, iterate, deliver) | code |
+| essay    | writing_communication | 6 (explore, commit, structure, draft, revise, polish) | text |
+| blog     | writing_communication | 6 (angle, audience, outline, draft, revise, polish) | text |
+| research | analysis_decision | 6 (frame, gather, evaluate, synthesize, structure, refine) | text |
+| decision | analysis_decision | 6 (frame, options, tradeoffs, stress_test, decide, document) | text |
 
 ### Coding Workflow Steps
 
@@ -71,6 +74,14 @@ uv run fastmcp inspect server/main.py:mcp  # verify tools
 ```
 
 Reads `FASTMCP_HOST` (default `127.0.0.1`) and `FASTMCP_PORT` (default `8000`) from env.
+
+## Rate Limiting
+
+For production deployments, configure rate limiting at the hosting/reverse-proxy layer:
+
+- **Recommended:** 60 requests per minute per IP.
+- This prevents runaway loops from LLM clients while allowing normal interactive use.
+- Configure in your reverse proxy (nginx, Caddy, Cloudflare) rather than in the application.
 
 ## Docker
 

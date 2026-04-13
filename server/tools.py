@@ -67,6 +67,11 @@ def register_tools(mcp, workflows):
                 "available_types": list(workflows.keys()),
             }
 
+        active = state.count_active()
+        if active >= 5:
+            active_sessions = [s for s in state.list_sessions() if s["status"] == "active"]
+            return {"error": f"Session cap reached ({active}/5). Delete or complete a session first.", "active_sessions": active_sessions}
+
         wf = workflows[workflow_type]
         first_step = wf["steps"][0]
         sid = state.create_session(workflow_type, current_step=first_step["id"])
@@ -172,6 +177,42 @@ def register_tools(mcp, workflows):
             result["gates"] = nxt["gates"]
 
         return result
+
+    @mcp.tool()
+    def revise_step(session_id: str, step_id: str) -> dict:
+        """Revise a previously completed step. Resets current_step to the target,
+        returns its previous content, and deletes all step_data after it."""
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, wf = resolved
+
+        target_idx, target_step = _find_step(wf, step_id)
+        if target_idx < 0:
+            return {"error": f"Step '{step_id}' not found in workflow", "session_id": session_id}
+
+        # Target must have been completed (its data must exist)
+        if step_id not in session["step_data"]:
+            return {"error": f"Step '{step_id}' has not been completed yet", "session_id": session_id}
+
+        previous_content = session["step_data"][step_id]
+
+        # Delete step_data for all steps after target
+        steps_after = [s["id"] for s in wf["steps"][target_idx + 1:]]
+        state.invalidate_steps_after(session_id, steps_after)
+
+        # Reset current_step to target
+        state.update_session(session_id, current_step=step_id)
+
+        return {
+            "session_id": session_id,
+            "revised_step": {"id": target_step["id"], "title": target_step["title"]},
+            "previous_content": previous_content,
+            "invalidated_steps": steps_after,
+            "directive": target_step["directive_template"],
+            "do_not": _DO_NOT_RULES,
+            "gates": target_step["gates"],
+        }
 
     @mcp.tool()
     def list_sessions() -> dict:

@@ -66,6 +66,31 @@ def clear_sessions() -> None:
     _sessions.clear()
 
 
+def invalidate_steps_after(session_id: str, step_ids: list[str]) -> None:
+    """Delete step_data entries for the given step IDs."""
+    session = get_session(session_id)
+    for sid in step_ids:
+        session["step_data"].pop(sid, None)
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def count_active() -> int:
+    """Return count of non-complete sessions."""
+    return sum(1 for s in _sessions.values() if s["current_step"] != COMPLETE)
+
+
+def expire_sessions(ttl_hours: int = 24) -> list[str]:
+    """Delete sessions whose updated_at is older than ttl_hours. Returns deleted IDs."""
+    now = datetime.now(timezone.utc)
+    expired = []
+    for sid, s in list(_sessions.items()):
+        updated = datetime.fromisoformat(s["updated_at"])
+        if (now - updated).total_seconds() > ttl_hours * 3600:
+            expired.append(sid)
+            del _sessions[sid]
+    return expired
+
+
 def delete_session(session_id: str) -> dict:
     """Remove session and return its data. Raises KeyError if not found."""
     if session_id not in _sessions:
