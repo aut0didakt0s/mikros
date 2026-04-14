@@ -74,7 +74,7 @@ Determinism comes from gates in the runtime, not from prompt engineering. The MC
 |-------|------------|--------|
 | **mikrós** (this repo) | YAML schema, MCP server runtime (`mikros-server` package), validation tooling, simplicity-guard | live |
 | **mikrós-{domain}** | Per-domain MCP servers built on the runtime | live: writing, analysis, professional |
-| **autodidaktós** | Bring-your-own-key chat client (web first, mobile later) | future |
+| **real-agora** | Bring-your-own-key chat client (web first, mobile later) | future |
 
 ## The YAML schema
 
