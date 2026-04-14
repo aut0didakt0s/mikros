@@ -103,13 +103,6 @@ def set_escalation(session_id: str, guardrail_id: str, message: str) -> None:
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
 
 
-def clear_escalation(session_id: str) -> None:
-    """Clear escalation flag on a session."""
-    session = get_session(session_id)
-    session["escalation"] = None
-    session["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-
 def count_active() -> int:
     """Return count of non-complete sessions."""
     return sum(1 for s in _sessions.values() if s["current_step"] != COMPLETE)
