@@ -8,7 +8,7 @@
 
 - [Installation](#installation)
 - [The thesis](#the-thesis)
-- [Architecture — four layers](#architecture--four-layers)
+- [Architecture — three layers](#architecture--three-layers)
 - [The YAML schema](#the-yaml-schema)
 - [The MCP server runtime](#the-mcp-server-runtime)
   - [Public API](#public-api)
@@ -39,14 +39,13 @@ LLMs are more useful when constrained through authored conversational programs t
 
 Determinism comes from gates in the runtime, not from prompt engineering. The MCP server rejects out-of-order step submissions, invalidates downstream data on revision, caps active sessions, and injects do-not rules into every directive. Any LLM that can read English and call MCP tools can execute the workflow — no provider adapter, no per-LLM prompt translation.
 
-## Architecture — four layers
+## Architecture — three layers
 
 | Layer | What it is | Status |
 |-------|------------|--------|
 | **mikrós** (this repo) | YAML schema, MCP server runtime (`mikros-server` package), validation tooling, simplicity-guard | live |
 | **mikrós-{domain}** | Per-domain MCP servers built on the runtime | live: writing, analysis, professional |
 | **autodidaktós** | Bring-your-own-key chat client (web first, mobile later) | future |
-| **megálos** | Terminal-first developer harness for structured coding workflows | future (currently embedded in this repo) |
 
 ## The YAML schema
 
