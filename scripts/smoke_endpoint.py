@@ -50,7 +50,7 @@ def _fetch_names_local(workflow_dir: Path | None):
 
     mcp = create_app(workflow_dir=workflow_dir)
     result = asyncio.run(mcp.call_tool("list_workflows", {}))
-    return _extract_names(result.structured_content)  # type: ignore[attr-defined,union-attr]
+    return _extract_names(getattr(result, "structured_content", None))
 
 
 def main(argv=None) -> int:
@@ -67,12 +67,9 @@ def main(argv=None) -> int:
         else:
             wf_dir = Path(args.workflow_dir) if args.workflow_dir else None
             names = _fetch_names_local(wf_dir)
-    except ValueError as e:
-        print(f"ERROR: malformed response from {args.target}: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:  # connection / import / runtime
-        print(f"ERROR: failed to reach {args.target}: {e}", file=sys.stderr)
-        return 3
+    except Exception as e:
+        print(f"ERROR: {args.target}: {e}", file=sys.stderr)
+        return 1
 
     missing = [n for n in args.expected if n not in names]
     if missing:
