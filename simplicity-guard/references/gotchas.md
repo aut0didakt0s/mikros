@@ -27,3 +27,11 @@ Append failure modes here: `## YYYY-MM-DD — title`, then **Failure:**, **Root 
 **Root cause:** Subagent summaries are self-reported; agents can confuse "I edited this in a transient buffer" with "I committed this". No automated cross-check verifies summary claims against the actual commit.
 
 **Rule added:** The `/execute-task` dispatcher must run `git -C <worktree-path> show --stat HEAD` after the subagent returns and reconcile the file list against the summary's "modified" section. Discrepancies fail the task gate. Until that's automated, manually verify any T## summary that claims to retarget framework code before advancing STATE.md.
+
+## 2026-04-14 — plan-slice file lists under-count mechanical rename scope
+
+**Failure:** M009/S01/T02's plan listed three target files (`.mikros/`, `mikros.py`, `install.sh`). At commit time the grep audit found eleven additional live code references (hooks, lib helpers, gitignore, seven shell tests) that move lockstep with T02's renames and would have broken the build on merge if deferred to T06. The phase-builder honored the stated scope and hit its turn limit trying to resolve the shell-test gap mid-execution; the dispatcher had to land a second commit to close the gap.
+
+**Root cause:** The plan-slice inventory relies on an Explore-subagent grep pass, which scans for the token being renamed but doesn't disambiguate "prose mention" from "live reference that breaks if not updated lockstep." Shell tests of a renamed script, sandbox-path assertions in caveman/install/loc-budget tests, and hook files that read the renamed state dir were absent from the plan because the inventory pass didn't model "this test exercises code I'm about to rename."
+
+**Rule added:** When plan-slice produces a rename inventory, the dispatcher should grep once more for the rename target across `tests/`, `.claude/hooks/`, `.claude/lib/`, `.gitignore`, and the standalone simplicity-guard tree — *before* finalizing the task plan. Any test whose assertions or sandbox paths mention the rename target is a lockstep dependency and must be in the same task's file list. If a test's target file moves to a later task, defer the test's references to the later task too. The anti-pattern is "rename in task N, break tests in N, hope T06 catches it" — T06 is a verification gate, not a repair tool.
