@@ -18,6 +18,9 @@ def create_session(workflow_type: str, current_step: str = "") -> str:
         "current_step": current_step,
         "step_data": {},
         "retry_counts": {},
+        "step_visit_counts": {},
+        "escalation": None,
+        "artifact_checkpoints": {},
         "created_at": now,
         "updated_at": now,
     }
@@ -84,6 +87,29 @@ def increment_retry(session_id: str, step_id: str) -> int:
     return count
 
 
+def increment_visit(session_id: str, step_id: str) -> int:
+    """Increment and return visit count for a step."""
+    session = get_session(session_id)
+    count = session["step_visit_counts"].get(step_id, 0) + 1
+    session["step_visit_counts"][step_id] = count
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+    return count
+
+
+def set_escalation(session_id: str, guardrail_id: str, message: str) -> None:
+    """Set escalation flag on a session."""
+    session = get_session(session_id)
+    session["escalation"] = {"guardrail_id": guardrail_id, "message": message}
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def clear_escalation(session_id: str) -> None:
+    """Clear escalation flag on a session."""
+    session = get_session(session_id)
+    session["escalation"] = None
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+
 def count_active() -> int:
     """Return count of non-complete sessions."""
     return sum(1 for s in _sessions.values() if s["current_step"] != COMPLETE)
@@ -99,6 +125,20 @@ def expire_sessions(ttl_hours: int = 24) -> list[str]:
             expired.append(sid)
             del _sessions[sid]
     return expired
+
+
+def store_artifact(session_id: str, step_id: str, artifact_id: str, content: str) -> None:
+    """Store a checkpointed artifact for a step."""
+    session = get_session(session_id)
+    step_artifacts = session["artifact_checkpoints"].setdefault(step_id, {})
+    step_artifacts[artifact_id] = content
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def get_artifacts(session_id: str, step_id: str) -> dict:
+    """Get all checkpointed artifacts for a step. Returns empty dict if none."""
+    session = get_session(session_id)
+    return session["artifact_checkpoints"].get(step_id, {})
 
 
 def delete_session(session_id: str) -> dict:

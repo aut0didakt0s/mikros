@@ -6,10 +6,11 @@ from tests.conftest import call_tool
 class TestListWorkflows:
     def test_list_all(self):
         r = call_tool("list_workflows", {})
-        assert r["total"] == 9
+        assert r["total"] == 12
         names = {w["name"] for w in r["workflows"]}
         assert {"coding", "essay", "blog", "research", "decision"}.issubset(names)
         assert {"demo_validation", "demo_context", "demo_directives_socratic", "demo_directives_direct"}.issubset(names)
+        assert {"demo_branching", "demo_artifacts", "demo_guardrails"}.issubset(names)
 
     def test_filter_by_category(self):
         r = call_tool("list_workflows", {"category": "writing_communication"})

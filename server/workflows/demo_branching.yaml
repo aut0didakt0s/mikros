@@ -1,0 +1,47 @@
+name: demo_branching
+description: Demo workflow for adaptive branching — assesses expertise and routes to one of three tracks.
+category: demo
+output_format: text
+
+steps:
+  - id: assess_expertise
+    title: Assess User Expertise
+    directive_template: >-
+      Ask the user about their familiarity with the topic. Choose one of the declared branches
+      based on their response.
+    gates:
+      - User expertise level determined
+    anti_patterns:
+      - Skipping the assessment
+    branches:
+      - next: beginner_track
+        condition: user is new to the topic
+      - next: intermediate_track
+        condition: user has some experience
+      - next: advanced_track
+        condition: user is expert
+    default_branch: intermediate_track
+
+  - id: beginner_track
+    title: Beginner Track
+    directive_template: Explain concepts at a beginner level with concrete examples.
+    gates:
+      - Explanation is simple and clear
+    anti_patterns:
+      - Using jargon without defining it
+
+  - id: intermediate_track
+    title: Intermediate Track
+    directive_template: Provide practical examples assuming moderate familiarity.
+    gates:
+      - Examples are actionable
+    anti_patterns:
+      - Repeating basics unnecessarily
+
+  - id: advanced_track
+    title: Advanced Track
+    directive_template: Go deep into nuances, edge cases, and advanced patterns.
+    gates:
+      - Covers advanced material
+    anti_patterns:
+      - Over-simplifying

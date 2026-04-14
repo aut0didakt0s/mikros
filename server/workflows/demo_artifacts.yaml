@@ -1,0 +1,50 @@
+name: demo_artifacts
+description: Demo workflow for server-validated intermediate artifacts — outline then final draft.
+category: demo
+output_format: structured
+
+steps:
+  - id: draft_report
+    title: Draft the Report
+    directive_template: >-
+      First produce an outline (title + 3 sections). Then expand into a final draft (body 200+ chars).
+      Submit each artifact with its artifact_id.
+    gates:
+      - Outline has title and at least three sections
+      - Final draft body is at least 200 characters
+    anti_patterns:
+      - Submitting a final draft without an outline
+    intermediate_artifacts:
+      - id: outline
+        description: Report outline with title and sections.
+        schema:
+          type: object
+          required: [title, sections]
+          properties:
+            title:
+              type: string
+              minLength: 5
+            sections:
+              type: array
+              minItems: 3
+              items:
+                type: string
+        checkpoint: true
+      - id: final_draft
+        description: Full report body.
+        schema:
+          type: object
+          required: [body]
+          properties:
+            body:
+              type: string
+              minLength: 200
+    output_from: final_draft
+
+  - id: publish
+    title: Publish
+    directive_template: Confirm the draft is ready to publish.
+    gates:
+      - User confirms
+    anti_patterns:
+      - Publishing without confirmation

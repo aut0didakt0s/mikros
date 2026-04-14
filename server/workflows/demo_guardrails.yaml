@@ -1,0 +1,56 @@
+name: demo_guardrails
+description: Demo workflow for guardrails — crisis keyword force_branch and revisit escalate.
+category: demo
+output_format: text
+
+steps:
+  - id: intake
+    title: Intake
+    directive_template: >-
+      Listen to the user. If content needs revision, use the revise branch; otherwise proceed.
+    gates:
+      - User input gathered
+    anti_patterns:
+      - Ignoring distress signals
+    branches:
+      - next: intake
+        condition: content needs another pass
+      - next: summary
+        condition: ready to summarize
+    default_branch: summary
+
+  - id: summary
+    title: Summarize
+    directive_template: Summarize the conversation.
+    gates:
+      - Summary is accurate
+    anti_patterns:
+      - Missing key points
+
+  - id: crisis_support
+    title: Crisis Support
+    directive_template: >-
+      Provide safety resources and encourage the user to contact a crisis support line.
+      Do not continue the original task.
+    gates:
+      - Safety resources offered
+    anti_patterns:
+      - Dismissing the user's feelings
+
+guardrails:
+  - id: crisis-keyword
+    trigger:
+      type: keyword_match
+      patterns:
+        - "hurt myself"
+        - "self-harm"
+    action: force_branch
+    target_step: crisis_support
+    message: Detected crisis language. Redirecting to crisis support.
+
+  - id: intake-loop
+    trigger:
+      type: step_revisit
+      max_visits: 3
+    action: escalate
+    message: Too many revisits of the same step. Session escalated.

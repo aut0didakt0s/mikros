@@ -43,6 +43,22 @@ def _validate_step_optional_fields(step: dict, label: str, errors: list[str]) ->
                     errors.append(f"Step '{label}' inject_context[{j}] 'fields' must be a list")
                 if "summary" in entry and not isinstance(entry["summary"], bool):
                     errors.append(f"Step '{label}' inject_context[{j}] 'summary' must be a boolean")
+    if "branches" in step:
+        branches = step["branches"]
+        if not isinstance(branches, list):
+            errors.append(f"Step '{label}' branches must be a list")
+        else:
+            for j, branch in enumerate(branches):
+                if not isinstance(branch, dict):
+                    errors.append(f"Step '{label}' branches[{j}] must be a mapping")
+                    continue
+                if "next" not in branch or not isinstance(branch.get("next"), str):
+                    errors.append(f"Step '{label}' branches[{j}] must have a 'next' string")
+                if "condition" not in branch or not isinstance(branch.get("condition"), str):
+                    errors.append(f"Step '{label}' branches[{j}] must have a 'condition' string")
+    if "default_branch" in step:
+        if not isinstance(step["default_branch"], str):
+            errors.append(f"Step '{label}' default_branch must be a string")
     if "directives" in step:
         d = step["directives"]
         if not isinstance(d, dict):
@@ -56,6 +72,45 @@ def _validate_step_optional_fields(step: dict, label: str, errors: list[str]) ->
                     errors.append(f"Step '{label}' directives.constraints must be a list")
                 elif not all(isinstance(c, str) for c in d["constraints"]):
                     errors.append(f"Step '{label}' directives.constraints entries must be strings")
+    if "intermediate_artifacts" in step:
+        ia = step["intermediate_artifacts"]
+        if not isinstance(ia, list):
+            errors.append(f"Step '{label}' intermediate_artifacts must be a list")
+        else:
+            ia_ids = set()
+            for j, art in enumerate(ia):
+                if not isinstance(art, dict):
+                    errors.append(f"Step '{label}' intermediate_artifacts[{j}] must be a mapping")
+                    continue
+                for rk in ("id", "description", "schema"):
+                    if rk not in art:
+                        errors.append(f"Step '{label}' intermediate_artifacts[{j}] missing '{rk}'")
+                if "id" in art:
+                    if not isinstance(art["id"], str):
+                        errors.append(f"Step '{label}' intermediate_artifacts[{j}] 'id' must be a string")
+                    else:
+                        ia_ids.add(art["id"])
+                if "description" in art and not isinstance(art["description"], str):
+                    errors.append(f"Step '{label}' intermediate_artifacts[{j}] 'description' must be a string")
+                if "schema" in art:
+                    if not isinstance(art["schema"], dict):
+                        errors.append(f"Step '{label}' intermediate_artifacts[{j}] 'schema' must be a dict")
+                    else:
+                        try:
+                            jsonschema.Draft202012Validator.check_schema(art["schema"])
+                        except jsonschema.SchemaError as e:
+                            errors.append(f"Step '{label}' intermediate_artifacts[{j}] schema invalid: {e.message}")
+                if "checkpoint" in art and not isinstance(art["checkpoint"], bool):
+                    errors.append(f"Step '{label}' intermediate_artifacts[{j}] 'checkpoint' must be a boolean")
+            # output_from cross-ref
+            if "output_from" in step:
+                of = step["output_from"]
+                if not isinstance(of, str):
+                    errors.append(f"Step '{label}' output_from must be a string")
+                elif ia_ids and of not in ia_ids:
+                    errors.append(f"Step '{label}' output_from '{of}' not found in intermediate_artifacts")
+    elif "output_from" in step:
+        errors.append(f"Step '{label}' has output_from without intermediate_artifacts")
 
 
 def validate_workflow(path: str) -> tuple[list[str], dict | None]:
@@ -103,6 +158,50 @@ def validate_workflow(path: str) -> tuple[list[str], dict | None]:
             if isinstance(entry, dict) and "from" in entry and isinstance(entry["from"], str):
                 if entry["from"] not in all_step_ids:
                     errors.append(f"Step '{label}' inject_context references nonexistent step '{entry['from']}'")
+    # Cross-reference: branches[].next and default_branch must point to existing step IDs
+    for step in doc["steps"]:
+        if not isinstance(step, dict):
+            continue
+        label = step.get("id", "?")
+        if "branches" in step and isinstance(step["branches"], list):
+            for branch in step["branches"]:
+                if isinstance(branch, dict) and isinstance(branch.get("next"), str):
+                    if branch["next"] not in all_step_ids:
+                        errors.append(f"Step '{label}' branch references nonexistent step '{branch['next']}'")
+        if "default_branch" in step and isinstance(step["default_branch"], str):
+            if step["default_branch"] not in all_step_ids:
+                errors.append(f"Step '{label}' default_branch references nonexistent step '{step['default_branch']}'")
+    # Validate top-level guardrails
+    if "guardrails" in doc:
+        guardrails = doc["guardrails"]
+        if not isinstance(guardrails, list):
+            errors.append("Workflow 'guardrails' must be a list")
+        else:
+            _GUARDRAIL_ACTIONS = {"warn", "force_branch", "escalate"}
+            _TRIGGER_TYPES = {"keyword_match", "step_count", "step_revisit", "output_length"}
+            for gi, gr in enumerate(guardrails):
+                if not isinstance(gr, dict):
+                    errors.append(f"guardrails[{gi}] must be a mapping")
+                    continue
+                for rk in ("id", "trigger", "action", "message"):
+                    if rk not in gr:
+                        errors.append(f"guardrails[{gi}] missing required key '{rk}'")
+                if "action" in gr and gr["action"] not in _GUARDRAIL_ACTIONS:
+                    errors.append(f"guardrails[{gi}] action must be one of {sorted(_GUARDRAIL_ACTIONS)}")
+                if "trigger" in gr:
+                    trigger = gr["trigger"]
+                    if not isinstance(trigger, dict):
+                        errors.append(f"guardrails[{gi}] trigger must be a mapping")
+                    elif "type" not in trigger:
+                        errors.append(f"guardrails[{gi}] trigger missing 'type'")
+                    elif trigger["type"] not in _TRIGGER_TYPES:
+                        errors.append(f"guardrails[{gi}] trigger type must be one of {sorted(_TRIGGER_TYPES)}")
+                if gr.get("action") == "force_branch":
+                    if "target_step" not in gr:
+                        errors.append(f"guardrails[{gi}] force_branch action requires 'target_step'")
+                    elif isinstance(gr["target_step"], str) and gr["target_step"] not in all_step_ids:
+                        errors.append(f"guardrails[{gi}] target_step references nonexistent step '{gr['target_step']}'")
+
     return errors, doc
 
 

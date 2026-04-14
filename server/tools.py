@@ -1,6 +1,7 @@
 """MCP tool functions for mikros workflow engine."""
 
 import json
+import re
 
 import jsonschema
 
@@ -88,6 +89,28 @@ def _assemble_context(inject_context: list[dict], step_data: dict) -> list[dict]
     return result
 
 
+def _evaluate_guardrails(guardrails, content, session, step_id):
+    """Return first matching guardrail dict or None. Declaration order = priority."""
+    for gr in guardrails:
+        trigger = gr["trigger"]
+        t_type = trigger["type"]
+        if t_type == "keyword_match":
+            for pattern in trigger.get("patterns", []):
+                if re.search(pattern, content, re.IGNORECASE):
+                    return gr
+        elif t_type == "step_count":
+            if len(session["step_data"]) >= trigger.get("max", 0):
+                return gr
+        elif t_type == "step_revisit":
+            visits = session["step_visit_counts"].get(step_id, 0)
+            if visits >= trigger.get("max_visits", 0):
+                return gr
+        elif t_type == "output_length":
+            if len(content) > trigger.get("max_chars", 0):
+                return gr
+    return None
+
+
 def register_tools(mcp, workflows):
     """Register workflow tools on the FastMCP app."""
 
@@ -129,6 +152,7 @@ def register_tools(mcp, workflows):
         wf = workflows[workflow_type]
         first_step = wf["steps"][0]
         sid = state.create_session(workflow_type, current_step=first_step["id"])
+        state.increment_visit(sid, first_step["id"])
 
         result = {
             "session_id": sid,
@@ -167,6 +191,10 @@ def register_tools(mcp, workflows):
             result["injected_context"] = _assemble_context(current["inject_context"], session["step_data"])
         if current and current.get("directives"):
             result["directives"] = current["directives"]
+        if current and current.get("intermediate_artifacts"):
+            artifacts = state.get_artifacts(session_id, current["id"])
+            if artifacts:
+                result["artifact_checkpoints"] = artifacts
         return result
 
     @mcp.tool()
@@ -189,12 +217,23 @@ def register_tools(mcp, workflows):
         }
 
     @mcp.tool()
-    def submit_step(session_id: str, step_id: str, content: str) -> dict:
-        """Submit content for the current step. Enforces ordering — no skips, no backwards."""
+    def submit_step(session_id: str, step_id: str, content: str, branch: str = "", artifact_id: str = "") -> dict:
+        """Submit content for the current step. Enforces ordering — no skips, no backwards.
+
+        branch: when the current step has branches, selects which step comes next.
+        If empty and step has branches, default_branch is used as fallback."""
         resolved, err = _resolve_session(session_id, workflows)
         if err:
             return err
         session, wf = resolved
+
+        # Reject if session is escalated
+        if session.get("escalation"):
+            return {
+                "error": "Session is escalated. Resolve the escalation before continuing.",
+                "session_id": session_id,
+                "escalation": session["escalation"],
+            }
 
         current = session["current_step"]
         if current == _COMPLETE:
@@ -213,6 +252,136 @@ def register_tools(mcp, workflows):
 
         steps = wf["steps"]
         idx, step = _find_step(wf, step_id)
+
+        # Handle intermediate artifacts
+        ia_list = step.get("intermediate_artifacts")
+        if ia_list:
+            if not artifact_id:
+                expected = [a["id"] for a in ia_list]
+                return {
+                    "error": "Step has intermediate_artifacts. Must specify artifact_id.",
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "expected_artifacts": expected,
+                }
+            # Find matching artifact definition
+            art_def = None
+            for a in ia_list:
+                if a["id"] == artifact_id:
+                    art_def = a
+                    break
+            if not art_def:
+                return {
+                    "error": f"Unknown artifact_id '{artifact_id}'",
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "expected_artifacts": [a["id"] for a in ia_list],
+                }
+            # Validate against artifact's schema
+            try:
+                parsed = json.loads(content)
+            except (json.JSONDecodeError, TypeError) as e:
+                return {
+                    "status": "validation_error",
+                    "errors": [f"Content is not valid JSON: {e}"],
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "artifact_id": artifact_id,
+                }
+            validator = jsonschema.Draft202012Validator(art_def["schema"])
+            art_errors = [err.message for err in validator.iter_errors(parsed)]
+            if art_errors:
+                return {
+                    "status": "validation_error",
+                    "errors": art_errors,
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "artifact_id": artifact_id,
+                }
+            # Store checkpoint if flagged
+            if art_def.get("checkpoint"):
+                state.store_artifact(session_id, step_id, artifact_id, content)
+            # If not output_from, accept but don't advance
+            output_from = step.get("output_from", "")
+            if artifact_id != output_from:
+                return {
+                    "status": "artifact_accepted",
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "artifact_id": artifact_id,
+                    "current_step": step_id,
+                }
+            # artifact_id == output_from: fall through to normal flow
+            # (skip output_schema validation — artifact schema already validated)
+            step_data = session["step_data"]
+            step_data[step_id] = content
+
+            # Evaluate guardrails before state transition
+            guardrails = wf.get("guardrails", [])
+            fired_guardrail = _evaluate_guardrails(guardrails, content, session, step_id) if guardrails else None
+            guardrail_warning = None
+
+            if fired_guardrail:
+                action = fired_guardrail["action"]
+                if action == "escalate":
+                    state.set_escalation(session_id, fired_guardrail["id"], fired_guardrail["message"])
+                    state.update_session(session_id, step_data=step_data)
+                    return {
+                        "error": "Session escalated by guardrail.",
+                        "session_id": session_id,
+                        "guardrail_id": fired_guardrail["id"],
+                        "message": fired_guardrail["message"],
+                    }
+                elif action == "warn":
+                    guardrail_warning = fired_guardrail["message"]
+
+            # Determine next step (same logic as non-artifact path)
+            if fired_guardrail and fired_guardrail["action"] == "force_branch":
+                next_step_id = fired_guardrail["target_step"]
+            elif step.get("branches"):
+                valid_targets = [b["next"] for b in step["branches"]]
+                target = branch if branch else step.get("default_branch", "")
+                if target not in valid_targets:
+                    return {
+                        "error": f"Invalid branch '{target}'. Valid options: {valid_targets}",
+                        "session_id": session_id,
+                        "step_id": step_id,
+                    }
+                next_step_id = target
+            else:
+                is_last = idx == len(steps) - 1
+                next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+
+            if next_step_id != _COMPLETE:
+                state.increment_visit(session_id, next_step_id)
+            state.update_session(session_id, current_step=next_step_id, step_data=step_data)
+
+            result: dict = {
+                "session_id": session_id,
+                "submitted": {"id": step["id"], "title": step["title"]},
+                "artifact_id": artifact_id,
+                "progress": f"step {idx + 1} of {len(steps)} complete",
+            }
+            if guardrail_warning:
+                result["guardrail_warning"] = guardrail_warning
+            if next_step_id == _COMPLETE:
+                result["status"] = "workflow_complete"
+                result["message"] = "All steps complete. Call generate_artifact to produce final output."
+            else:
+                _, nxt = _find_step(wf, next_step_id)
+                result["next_step"] = {"id": nxt["id"], "title": nxt["title"]}
+                result["directive"] = nxt["directive_template"]
+                result["do_not"] = _DO_NOT_RULES
+                result["gates"] = nxt["gates"]
+                if nxt.get("inject_context"):
+                    result["injected_context"] = _assemble_context(nxt["inject_context"], step_data)
+                if nxt.get("directives"):
+                    result["directives"] = nxt["directives"]
+                if nxt.get("branches"):
+                    result["branches"] = nxt["branches"]
+                    if nxt.get("default_branch"):
+                        result["default_branch"] = nxt["default_branch"]
+            return result
 
         # Validate against output_schema if present
         validation_errors = _validate_output(content, step)
@@ -243,21 +412,62 @@ def register_tools(mcp, workflows):
         step_data = session["step_data"]
         step_data[step_id] = content
 
-        is_last = idx == len(steps) - 1
-        next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+        # Evaluate guardrails before state transition
+        guardrails = wf.get("guardrails", [])
+        fired_guardrail = _evaluate_guardrails(guardrails, content, session, step_id) if guardrails else None
+        guardrail_warning = None
+
+        if fired_guardrail:
+            action = fired_guardrail["action"]
+            if action == "escalate":
+                state.set_escalation(session_id, fired_guardrail["id"], fired_guardrail["message"])
+                state.update_session(session_id, step_data=step_data)
+                return {
+                    "error": "Session escalated by guardrail.",
+                    "session_id": session_id,
+                    "guardrail_id": fired_guardrail["id"],
+                    "message": fired_guardrail["message"],
+                }
+            elif action == "warn":
+                guardrail_warning = fired_guardrail["message"]
+            # force_branch handled below during next-step determination
+
+        # Determine next step: force_branch guardrail overrides everything
+        if fired_guardrail and fired_guardrail["action"] == "force_branch":
+            next_step_id = fired_guardrail["target_step"]
+        elif step.get("branches"):
+            valid_targets = [b["next"] for b in step["branches"]]
+            target = branch if branch else step.get("default_branch", "")
+            if target not in valid_targets:
+                return {
+                    "error": f"Invalid branch '{target}'. Valid options: {valid_targets}",
+                    "session_id": session_id,
+                    "step_id": step_id,
+                }
+            next_step_id = target
+        else:
+            is_last = idx == len(steps) - 1
+            next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+
+        # Track visit count for the next step
+        if next_step_id != _COMPLETE:
+            state.increment_visit(session_id, next_step_id)
+
         state.update_session(session_id, current_step=next_step_id, step_data=step_data)
 
-        result: dict = {
+        result = {
             "session_id": session_id,
             "submitted": {"id": step["id"], "title": step["title"]},
             "progress": f"step {idx + 1} of {len(steps)} complete",
         }
+        if guardrail_warning:
+            result["guardrail_warning"] = guardrail_warning
 
-        if is_last:
+        if next_step_id == _COMPLETE:
             result["status"] = "workflow_complete"
             result["message"] = "All steps complete. Call generate_artifact to produce final output."
         else:
-            nxt = steps[idx + 1]
+            _, nxt = _find_step(wf, next_step_id)
             result["next_step"] = {"id": nxt["id"], "title": nxt["title"]}
             result["directive"] = nxt["directive_template"]
             result["do_not"] = _DO_NOT_RULES
@@ -266,6 +476,10 @@ def register_tools(mcp, workflows):
                 result["injected_context"] = _assemble_context(nxt["inject_context"], step_data)
             if nxt.get("directives"):
                 result["directives"] = nxt["directives"]
+            if nxt.get("branches"):
+                result["branches"] = nxt["branches"]
+                if nxt.get("default_branch"):
+                    result["default_branch"] = nxt["default_branch"]
 
         return result
 
