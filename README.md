@@ -4,6 +4,25 @@
 
 **A platform for authoring deterministic AI conversations.** YAML is the source code. An MCP server is the runtime. The LLM is a replaceable text engine that gets constrained, not unleashed.
 
+## Contents
+
+- [The thesis](#the-thesis)
+- [Architecture — four layers](#architecture--four-layers)
+- [The YAML schema](#the-yaml-schema)
+- [The MCP server runtime](#the-mcp-server-runtime)
+  - [Public API](#public-api)
+  - [MCP tools (9)](#mcp-tools-9)
+  - [Mechanical enforcement](#mechanical-enforcement)
+  - [Session state](#session-state)
+  - [Installation](#installation)
+- [MCP servers](#mcp-servers)
+- [Authoring a new domain repo](#authoring-a-new-domain-repo)
+- [simplicity-guard](#simplicity-guard)
+- [The iron rule](#the-iron-rule)
+- [Optional plugins](#optional-plugins)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
 ## The thesis
 
 LLMs are more useful when constrained through authored conversational programs than when left to free-associate. The value isn't in making LLMs do *more* — it's in making them do *exactly what a workflow author intended*, step by step, with mechanical enforcement at each transition.
@@ -11,8 +30,6 @@ LLMs are more useful when constrained through authored conversational programs t
 Determinism comes from gates in the runtime, not from prompt engineering. The MCP server rejects out-of-order step submissions, invalidates downstream data on revision, caps active sessions, and injects do-not rules into every directive. Any LLM that can read English and call MCP tools can execute the workflow — no provider adapter, no per-LLM prompt translation.
 
 ## Architecture — four layers
-
-mikrós is the **platform layer**. The full picture, from the [autodidaktós vision spec](2026-04-13-autodidaktos-vision-and-refactor.md):
 
 | Layer | What it is | Status |
 |-------|------------|--------|
@@ -33,8 +50,6 @@ Validate any workflow file:
 ```bash
 python -m mikros_server.validate path/to/workflow.yaml
 ```
-
-Cap on schema growth: it must NOT become Turing-complete. The moment it needs a debugger, it's failed. Target: a domain expert who knows YAML can author a workflow in under 30 minutes.
 
 ## The MCP server runtime
 
@@ -80,23 +95,25 @@ The server never calls any LLM. Zero LLM imports, zero provider references. Tool
 
 In-memory dict store. Sessions have `session_id`, `workflow_type`, `current_step`, `step_data`, timestamps. Cap of 5 active sessions, TTL-based expiration. No SQLite, no external state store — keeps the runtime trivially deployable.
 
-### Deployment
+### Installation
 
-The repo ships with a `Dockerfile` and `deploy.sh` for [Prefect Horizon](https://horizon.prefect.io). Today's example deployment exposes mikros at `Mikros.fastmcp.app/mcp`. Each domain repo deploys independently the same way.
+The mikrós MCP server runs at:
 
-## Live domain servers
+**`https://Mikros.fastmcp.app/mcp`**
 
-Three independent repos, each a thin wrapper around `mikros-server` that points at its own `workflows/` directory:
+Add it as a connector in any MCP-compatible client (Claude desktop or web, ChatGPT, Cursor, custom clients) — paste the URL, no install or local setup needed. Domain-specific endpoints (writing, analysis, professional) become available as their respective servers deploy.
 
-| Repo | Workflows | Remote |
-|------|-----------|--------|
-| `mikros-writing` | essay, blog | [github.com/aut0didakt0s/mikros-writing](https://github.com/aut0didakt0s/mikros-writing) |
-| `mikros-analysis` | research, decision | [github.com/aut0didakt0s/mikros-analysis](https://github.com/aut0didakt0s/mikros-analysis) |
-| `mikros-professional` | coding | [github.com/aut0didakt0s/mikros-professional](https://github.com/aut0didakt0s/mikros-professional) |
+## MCP servers
 
-Each is structured identically: flat `main.py` at repo root, own `pyproject.toml` with the pinned mikros-server git dep, own `tests/`, own `Dockerfile` and `deploy.sh`. New domain repos follow the same template.
+Workflows are grouped by **category**, and each category lives in its own MCP server (a thin wrapper around `mikros-server` that exposes the workflows for that category). Mix and match — connect to one server, several, or all, depending on the kinds of work you want structured:
 
-This repo bundles only `mikros_server/workflows/example.yaml` as a reference workflow and `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures exercising M004/M005 features). Production workflows live exclusively in their domain repos.
+| Server | Category | Workflows | Remote |
+|--------|----------|-----------|--------|
+| `mikros-writing` | writing & communication | essay, blog | [github.com/aut0didakt0s/mikros-writing](https://github.com/aut0didakt0s/mikros-writing) |
+| `mikros-analysis` | analysis & decision | research, decision | [github.com/aut0didakt0s/mikros-analysis](https://github.com/aut0didakt0s/mikros-analysis) |
+| `mikros-professional` | professional | coding | [github.com/aut0didakt0s/mikros-professional](https://github.com/aut0didakt0s/mikros-professional) |
+
+This repo itself bundles only `mikros_server/workflows/example.yaml` as a reference workflow plus `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures exercising M004/M005 features). Production workflows live exclusively in their category-specific repos.
 
 ## Authoring a new domain repo
 
