@@ -32,8 +32,8 @@ chmod +x "$WORK/bin/git" "$WORK/bin/ruff" "$WORK/bin/mypy"
 mkdir -p "$WORK/.claude/skills/simplicity-guard/scripts"
 cp .claude/skills/simplicity-guard/scripts/loc-budget.sh \
    "$WORK/.claude/skills/simplicity-guard/scripts/loc-budget.sh"
-mkdir -p "$WORK/.mikros"
-echo "loc_budget: 300" > "$WORK/.mikros/STATE.md"
+mkdir -p "$WORK/.megalos"
+echo "loc_budget: 300" > "$WORK/.megalos/STATE.md"
 touch "$WORK/foo.py"
 
 # --- Test 1: No file path in stdin JSON → silent exit 0

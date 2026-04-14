@@ -7,13 +7,13 @@ SCRIPT=".claude/skills/simplicity-guard/scripts/loc-budget.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# --- Test 1: No .mikros/STATE.md → exit 0 (no active task, no enforcement)
+# --- Test 1: No .megalos/STATE.md → exit 0 (no active task, no enforcement)
 ( cd "$WORK" && bash "$OLDPWD/$SCRIPT" )
 assert_exit_code 0 $? "no STATE.md → exit 0"
 
 # --- Test 2: STATE.md with small budget and small diff → exit 0
-mkdir -p "$WORK/.mikros"
-cat > "$WORK/.mikros/STATE.md" <<'EOF'
+mkdir -p "$WORK/.megalos"
+cat > "$WORK/.megalos/STATE.md" <<'EOF'
 loc_budget: 300
 EOF
 # Stub git so "git diff --shortstat" returns a small diff
@@ -41,7 +41,7 @@ PATH="$WORK/bin:$PATH" bash -c "cd '$WORK' && bash '$OLDPWD/$SCRIPT'" 2>/dev/nul
 assert_exit_code 2 "$EC" "500 insertions > 300 budget → exit 2"
 
 # --- Test 4: Default budget when STATE.md has no loc_budget line
-cat > "$WORK/.mikros/STATE.md" <<'EOF'
+cat > "$WORK/.megalos/STATE.md" <<'EOF'
 active_task: T01
 EOF
 cat > "$WORK/bin/git" <<'EOF'

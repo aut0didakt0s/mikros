@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Tests for mikros.py state machine
+# Tests for megalos.py state machine
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/assert.sh"
 
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MIKROS="python3 $REPO_ROOT/mikros.py"
+MEGALOS="python3 $REPO_ROOT/megalos.py"
 
 # Create a temp directory for isolated tests
 TMPDIR_BASE="$(mktemp -d)"
@@ -15,9 +15,9 @@ trap cleanup EXIT
 
 setup_fresh() {
   local dir="$TMPDIR_BASE/fresh-$$-$RANDOM"
-  mkdir -p "$dir/.mikros/templates"
-  cat > "$dir/.mikros/STATE.md" <<'STATE'
-# mikros state
+  mkdir -p "$dir/.megalos/templates"
+  cat > "$dir/.megalos/STATE.md" <<'STATE'
+# megalos state
 
 active_milestone:
 active_slice:
@@ -40,20 +40,20 @@ STATE
 setup_with_milestone() {
   local dir
   dir="$(setup_fresh)"
-  sed -i.bak 's/^active_milestone:.*/active_milestone: M001/' "$dir/.mikros/STATE.md"
-  rm -f "$dir/.mikros/STATE.md.bak"
-  mkdir -p "$dir/.mikros/plans/M001"
-  echo "# Context" > "$dir/.mikros/plans/M001/CONTEXT.md"
+  sed -i.bak 's/^active_milestone:.*/active_milestone: M001/' "$dir/.megalos/STATE.md"
+  rm -f "$dir/.megalos/STATE.md.bak"
+  mkdir -p "$dir/.megalos/plans/M001"
+  echo "# Context" > "$dir/.megalos/plans/M001/CONTEXT.md"
   echo "$dir"
 }
 
 setup_with_slice() {
   local dir
   dir="$(setup_with_milestone)"
-  sed -i.bak 's/^active_slice:.*/active_slice: S01/' "$dir/.mikros/STATE.md"
-  sed -i.bak 's/^active_task:.*/active_task: T01/' "$dir/.mikros/STATE.md"
-  rm -f "$dir/.mikros/STATE.md.bak"
-  cat > "$dir/.mikros/plans/M001/S01-PLAN.md" <<'PLAN'
+  sed -i.bak 's/^active_slice:.*/active_slice: S01/' "$dir/.megalos/STATE.md"
+  sed -i.bak 's/^active_task:.*/active_task: T01/' "$dir/.megalos/STATE.md"
+  rm -f "$dir/.megalos/STATE.md.bak"
+  cat > "$dir/.megalos/plans/M001/S01-PLAN.md" <<'PLAN'
 # Slice S01
 
 ### T01 — First task
@@ -95,84 +95,84 @@ run_expecting() {
 echo "=== gate discuss (fresh project) ==="
 dir="$(setup_fresh)"
 run_expecting 0 "gate discuss on fresh project" \
-  bash -c "cd '$dir' && $MIKROS gate discuss"
+  bash -c "cd '$dir' && $MEGALOS gate discuss"
 
 # --- gate plan-slice ---
 
 echo "=== gate plan-slice (no milestone) ==="
 dir="$(setup_fresh)"
 run_expecting 1 "gate plan-slice no milestone" \
-  bash -c "cd '$dir' && $MIKROS gate plan-slice 2>/dev/null"
+  bash -c "cd '$dir' && $MEGALOS gate plan-slice 2>/dev/null"
 
 echo "=== gate plan-slice (with milestone, no CONTEXT.md) ==="
 dir="$(setup_fresh)"
-sed -i.bak 's/^active_milestone:.*/active_milestone: M001/' "$dir/.mikros/STATE.md"
-rm -f "$dir/.mikros/STATE.md.bak"
+sed -i.bak 's/^active_milestone:.*/active_milestone: M001/' "$dir/.megalos/STATE.md"
+rm -f "$dir/.megalos/STATE.md.bak"
 run_expecting 1 "gate plan-slice no CONTEXT.md" \
-  bash -c "cd '$dir' && $MIKROS gate plan-slice 2>/dev/null"
+  bash -c "cd '$dir' && $MEGALOS gate plan-slice 2>/dev/null"
 
 echo "=== gate plan-slice (with milestone + CONTEXT.md) ==="
 dir="$(setup_with_milestone)"
 run_expecting 0 "gate plan-slice with milestone" \
-  bash -c "cd '$dir' && $MIKROS gate plan-slice"
+  bash -c "cd '$dir' && $MEGALOS gate plan-slice"
 
 # --- gate execute-task ---
 
 echo "=== gate execute-task (no slice) ==="
 dir="$(setup_with_milestone)"
 run_expecting 1 "gate execute-task no slice" \
-  bash -c "cd '$dir' && $MIKROS gate execute-task T01 2>/dev/null"
+  bash -c "cd '$dir' && $MEGALOS gate execute-task T01 2>/dev/null"
 
 echo "=== gate execute-task (wrong task) ==="
 dir="$(setup_with_slice)"
 run_expecting 1 "gate execute-task wrong task" \
-  bash -c "cd '$dir' && $MIKROS gate execute-task T99 2>/dev/null"
+  bash -c "cd '$dir' && $MEGALOS gate execute-task T99 2>/dev/null"
 
 echo "=== gate execute-task (correct task) ==="
 dir="$(setup_with_slice)"
 run_expecting 0 "gate execute-task correct task" \
-  bash -c "cd '$dir' && $MIKROS gate execute-task T01"
+  bash -c "cd '$dir' && $MEGALOS gate execute-task T01"
 
 # --- gate sniff-test ---
 
 echo "=== gate sniff-test (no completed tasks) ==="
 dir="$(setup_with_slice)"
 run_expecting 1 "gate sniff-test no completed tasks" \
-  bash -c "cd '$dir' && $MIKROS gate sniff-test 2>/dev/null"
+  bash -c "cd '$dir' && $MEGALOS gate sniff-test 2>/dev/null"
 
 echo "=== gate sniff-test (with summary file) ==="
 dir="$(setup_with_slice)"
-mkdir -p "$dir/.mikros/plans/M001/S01"
-echo "# Summary" > "$dir/.mikros/plans/M001/S01/T01-SUMMARY.md"
+mkdir -p "$dir/.megalos/plans/M001/S01"
+echo "# Summary" > "$dir/.megalos/plans/M001/S01/T01-SUMMARY.md"
 run_expecting 0 "gate sniff-test with summary" \
-  bash -c "cd '$dir' && $MIKROS gate sniff-test"
+  bash -c "cd '$dir' && $MEGALOS gate sniff-test"
 
 # --- advance ---
 
 echo "=== advance T01 ==="
 dir="$(setup_with_slice)"
 run_expecting 0 "advance T01 exit code" \
-  bash -c "cd '$dir' && $MIKROS advance T01"
+  bash -c "cd '$dir' && $MEGALOS advance T01"
 
-assert_file_exists "$dir/.mikros/STATE.md" "STATE.md exists after advance"
-assert_file_contains "$dir/.mikros/STATE.md" "active_task: T02" "advance sets next task"
-assert_file_contains "$dir/.mikros/STATE.md" "loc_budget: 300" "advance sets next LOC budget"
-assert_file_contains "$dir/.mikros/STATE.md" "T01" "advance records completed task"
+assert_file_exists "$dir/.megalos/STATE.md" "STATE.md exists after advance"
+assert_file_contains "$dir/.megalos/STATE.md" "active_task: T02" "advance sets next task"
+assert_file_contains "$dir/.megalos/STATE.md" "loc_budget: 300" "advance sets next LOC budget"
+assert_file_contains "$dir/.megalos/STATE.md" "T01" "advance records completed task"
 
 echo "=== advance last task ==="
 dir="$(setup_with_slice)"
-sed -i.bak 's/^active_task:.*/active_task: T03/' "$dir/.mikros/STATE.md"
-rm -f "$dir/.mikros/STATE.md.bak"
+sed -i.bak 's/^active_task:.*/active_task: T03/' "$dir/.megalos/STATE.md"
+rm -f "$dir/.megalos/STATE.md.bak"
 run_expecting 0 "advance last task" \
-  bash -c "cd '$dir' && $MIKROS advance T03"
-assert_file_contains "$dir/.mikros/STATE.md" "active_task:" "advance clears task when last"
+  bash -c "cd '$dir' && $MEGALOS advance T03"
+assert_file_contains "$dir/.megalos/STATE.md" "active_task:" "advance clears task when last"
 
 # --- write-summary ---
 
 echo "=== write-summary ==="
 dir="$(setup_with_slice)"
-mkdir -p "$dir/.mikros/plans/M001/S01"
-cat > "$dir/.mikros/DECISIONS.md" <<'DEC'
+mkdir -p "$dir/.megalos/plans/M001/S01"
+cat > "$dir/.megalos/DECISIONS.md" <<'DEC'
 # DECISIONS
 
 ## Entries
@@ -196,29 +196,29 @@ SUMMARY="## T01 — First task
 ### Verification output
 All passed"
 
-echo "$SUMMARY" | bash -c "cd '$dir' && $MIKROS write-summary T01"
+echo "$SUMMARY" | bash -c "cd '$dir' && $MEGALOS write-summary T01"
 rc=$?
 assert_exit_code "0" "$rc" "write-summary exit code"
 
-assert_file_exists "$dir/.mikros/plans/M001/S01/T01-SUMMARY.md" "summary file written"
-assert_file_contains "$dir/.mikros/plans/M001/S01/T01-SUMMARY.md" "feature-branch-123" "summary content preserved"
-assert_file_contains "$dir/.mikros/STATE.md" "active_worktree: feature-branch-123" "worktree branch extracted"
-assert_file_contains "$dir/.mikros/STATE.md" "active_worktree_path: /tmp/worktree/test" "worktree path extracted"
-assert_file_contains "$dir/.mikros/DECISIONS.md" "Use plain dicts" "decisions appended"
+assert_file_exists "$dir/.megalos/plans/M001/S01/T01-SUMMARY.md" "summary file written"
+assert_file_contains "$dir/.megalos/plans/M001/S01/T01-SUMMARY.md" "feature-branch-123" "summary content preserved"
+assert_file_contains "$dir/.megalos/STATE.md" "active_worktree: feature-branch-123" "worktree branch extracted"
+assert_file_contains "$dir/.megalos/STATE.md" "active_worktree_path: /tmp/worktree/test" "worktree path extracted"
+assert_file_contains "$dir/.megalos/DECISIONS.md" "Use plain dicts" "decisions appended"
 
 # --- atomic write safety ---
 
 echo "=== no temp files left behind ==="
 dir="$(setup_with_slice)"
-bash -c "cd '$dir' && $MIKROS advance T01"
-tmp_count=$(find "$dir/.mikros" -name "*.tmp" | wc -l | tr -d ' ')
+bash -c "cd '$dir' && $MEGALOS advance T01"
+tmp_count=$(find "$dir/.megalos" -name "*.tmp" | wc -l | tr -d ' ')
 assert_eq "0" "$tmp_count" "no tmp files after advance"
 
 # --- stderr message on gate failure ---
 
 echo "=== stderr message on gate failure ==="
 dir="$(setup_fresh)"
-err=$(bash -c "cd '$dir' && $MIKROS gate plan-slice" 2>&1 || true)
+err=$(bash -c "cd '$dir' && $MEGALOS gate plan-slice" 2>&1 || true)
 TESTS_RUN=$((TESTS_RUN + 1))
 if [ -z "$err" ]; then
   echo "FAIL: expected stderr output from gate failure" >&2

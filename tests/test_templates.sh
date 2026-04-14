@@ -3,7 +3,7 @@ set -e
 cd "$(dirname "$0")/.."
 source tests/lib/assert.sh
 
-TMPL_DIR=".mikros/templates"
+TMPL_DIR=".megalos/templates"
 
 for tmpl in STATE.md.tmpl PROJECT.md.tmpl DECISIONS.md.tmpl ROADMAP.md.tmpl S-PLAN.md.tmpl T-PLAN.md.tmpl T-SUMMARY.md.tmpl; do
   assert_file_exists "$TMPL_DIR/$tmpl" "template $tmpl exists"

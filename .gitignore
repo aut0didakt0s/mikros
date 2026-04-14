@@ -18,13 +18,13 @@ __pycache__/
 uv.lock
 
 # Runtime DB
-server/mikros_sessions.db
+server/megalos_sessions.db
 
 # Local notes
 SCRATCH.md
 
-# mikrós runtime state (per-project, not shared)
-.mikros/
+# megálos runtime state (per-project, not shared)
+.megalos/
 
 # Build artifacts
 *.egg-info/

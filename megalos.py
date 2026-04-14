@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mikros state machine — gate checks, task advancement, summary writing."""
+"""megálos state machine — gate checks, task advancement, summary writing."""
 
 import os
 import re
@@ -7,9 +7,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-MIKROS_DIR = Path(".mikros")
-STATE_PATH = MIKROS_DIR / "STATE.md"
-DECISIONS_PATH = MIKROS_DIR / "DECISIONS.md"
+MEGALOS_DIR = Path(".megalos")
+STATE_PATH = MEGALOS_DIR / "STATE.md"
+DECISIONS_PATH = MEGALOS_DIR / "DECISIONS.md"
 
 
 def atomic_write(path, content):
@@ -49,7 +49,7 @@ def parse_state():
 
 
 def rebuild_state(state, completed_lines, notes_section):
-    lines = ["# mikros state", ""]
+    lines = ["# megalos state", ""]
     for key in ["active_milestone", "active_slice", "active_task",
                 "active_worktree", "active_worktree_path", "loc_budget"]:
         lines.append(f"{key}: {state.get(key, '')}")
@@ -97,7 +97,7 @@ def parse_notes(raw):
     # Strip leading/trailing blank lines
     text = "\n".join(note_lines).strip()
     return text if text else ("This file is the single source of truth for "
-                              '"where am I in the workflow?" Every mikros '
+                              '"where am I in the workflow?" Every megalos '
                               "command reads it first and writes it last "
                               "(atomically, via temp file + mv).")
 
@@ -106,7 +106,7 @@ def parse_notes(raw):
 
 def cmd_gate(args):
     if not args:
-        print("Usage: mikros.py gate <command> [args...]", file=sys.stderr)
+        print("Usage: megalos.py gate <command> [args...]", file=sys.stderr)
         return 1
 
     command = args[0]
@@ -121,7 +121,7 @@ def cmd_gate(args):
             print("Gate failed: no active milestone set in STATE.md",
                   file=sys.stderr)
             return 1
-        context = MIKROS_DIR / "plans" / milestone / "CONTEXT.md"
+        context = MEGALOS_DIR / "plans" / milestone / "CONTEXT.md"
         if not context.exists():
             print(f"Gate failed: {context} does not exist", file=sys.stderr)
             return 1
@@ -129,7 +129,7 @@ def cmd_gate(args):
 
     if command == "execute-task":
         if len(args) < 2:
-            print("Usage: mikros.py gate execute-task <task-id>",
+            print("Usage: megalos.py gate execute-task <task-id>",
                   file=sys.stderr)
             return 1
         task_id = args[1]
@@ -151,7 +151,7 @@ def cmd_gate(args):
             print(f"Gate failed: active_milestone and active_slice must be "
                   f"set for {command}", file=sys.stderr)
             return 1
-        slice_dir = MIKROS_DIR / "plans" / milestone / slc
+        slice_dir = MEGALOS_DIR / "plans" / milestone / slc
         if not slice_dir.exists():
             print(f"Gate failed: no completed tasks (directory {slice_dir} "
                   f"missing)", file=sys.stderr)
@@ -171,7 +171,7 @@ def cmd_gate(args):
 
 def cmd_advance(args):
     if not args:
-        print("Usage: mikros.py advance <task-id>", file=sys.stderr)
+        print("Usage: megalos.py advance <task-id>", file=sys.stderr)
         return 1
 
     task_id = args[0]
@@ -183,7 +183,7 @@ def cmd_advance(args):
         print("Cannot advance: no active milestone/slice", file=sys.stderr)
         return 1
 
-    plan_path = MIKROS_DIR / "plans" / milestone / f"{slc}-PLAN.md"
+    plan_path = MEGALOS_DIR / "plans" / milestone / f"{slc}-PLAN.md"
     if not plan_path.exists():
         print(f"Cannot advance: {plan_path} not found", file=sys.stderr)
         return 1
@@ -243,7 +243,7 @@ def cmd_advance(args):
 
 def cmd_write_summary(args):
     if not args:
-        print("Usage: mikros.py write-summary <task-id>", file=sys.stderr)
+        print("Usage: megalos.py write-summary <task-id>", file=sys.stderr)
         return 1
 
     task_id = args[0]
@@ -259,7 +259,7 @@ def cmd_write_summary(args):
         return 1
 
     # Write summary file atomically
-    slice_dir = MIKROS_DIR / "plans" / milestone / slc
+    slice_dir = MEGALOS_DIR / "plans" / milestone / slc
     summary_path = slice_dir / f"{task_id}-SUMMARY.md"
     atomic_write(summary_path, summary)
 
@@ -334,7 +334,7 @@ def append_gotchas(content):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: mikros.py <gate|advance|write-summary> [args...]",
+        print("Usage: megalos.py <gate|advance|write-summary> [args...]",
               file=sys.stderr)
         sys.exit(1)
 

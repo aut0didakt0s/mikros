@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Unit test for .claude/lib/caveman-phase.sh — per-phase caveman decision.
 # Runs the helper against a sandbox working directory so we can stage
-# different .mikros/config files without touching the real repo.
+# different .megalos/config files without touching the real repo.
 set -e
 cd "$(dirname "$0")/.."
 source tests/lib/assert.sh
@@ -17,7 +17,7 @@ fi
 
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "$SANDBOX/.mikros"
+mkdir -p "$SANDBOX/.megalos"
 
 run_helper() {
   ( cd "$SANDBOX" && bash "$HELPER" active "$1" )
@@ -33,7 +33,7 @@ assert_helper() {
 }
 
 # --- No config file: defaults. mode=on, phases=execute-task,sniff-test,compress
-rm -f "$SANDBOX/.mikros/config"
+rm -f "$SANDBOX/.megalos/config"
 
 assert_helper "execute-task" "true"  "default: execute-task active"
 assert_helper "sniff-test"   "true"  "default: sniff-test active"
@@ -43,7 +43,7 @@ assert_helper "plan-slice"   "false" "default: plan-slice not active (spec phase
 assert_helper "nonsense"     "false" "default: unknown phase not active"
 
 # --- Master switch off: everything false, even default phases.
-cat > "$SANDBOX/.mikros/config" <<'EOF'
+cat > "$SANDBOX/.megalos/config" <<'EOF'
 caveman_mode=off
 caveman_phases=execute-task,sniff-test,compress
 EOF
@@ -52,7 +52,7 @@ assert_helper "sniff-test"   "false" "mode=off: sniff-test not active"
 assert_helper "discuss"      "false" "mode=off: discuss not active"
 
 # --- Custom phase list: only compress active.
-cat > "$SANDBOX/.mikros/config" <<'EOF'
+cat > "$SANDBOX/.megalos/config" <<'EOF'
 caveman_mode=on
 caveman_phases=compress
 EOF
@@ -61,7 +61,7 @@ assert_helper "execute-task" "false" "custom phases: execute-task dropped"
 assert_helper "sniff-test"   "false" "custom phases: sniff-test dropped"
 
 # --- Custom phase list: include discuss (user opts in explicitly).
-cat > "$SANDBOX/.mikros/config" <<'EOF'
+cat > "$SANDBOX/.megalos/config" <<'EOF'
 caveman_mode=on
 caveman_phases=discuss,execute-task
 EOF
@@ -70,23 +70,23 @@ assert_helper "execute-task" "true"  "opt-in: execute-task active"
 assert_helper "sniff-test"   "false" "opt-in: sniff-test dropped from list"
 
 # --- Config only mode, no phases line → default phases still apply.
-cat > "$SANDBOX/.mikros/config" <<'EOF'
+cat > "$SANDBOX/.megalos/config" <<'EOF'
 caveman_mode=on
 EOF
 assert_helper "execute-task" "true"  "mode-only config: default phases apply"
 assert_helper "discuss"      "false" "mode-only config: discuss still off"
 
 # --- Empty config file (zero bytes): defaults apply (mode=on, default phases).
-: > "$SANDBOX/.mikros/config"
+: > "$SANDBOX/.megalos/config"
 assert_helper "execute-task" "true"  "empty config: execute-task active (defaults)"
 assert_helper "discuss"      "false" "empty config: discuss not active (defaults)"
 assert_helper "compress"     "true"  "empty config: compress active (defaults)"
 
-# --- Missing .mikros directory entirely: defaults apply.
-rm -rf "$SANDBOX/.mikros"
-assert_helper "execute-task" "true"  "no .mikros dir: execute-task active (defaults)"
-assert_helper "discuss"      "false" "no .mikros dir: discuss not active (defaults)"
-mkdir -p "$SANDBOX/.mikros"
+# --- Missing .megalos directory entirely: defaults apply.
+rm -rf "$SANDBOX/.megalos"
+assert_helper "execute-task" "true"  "no .megalos dir: execute-task active (defaults)"
+assert_helper "discuss"      "false" "no .megalos dir: discuss not active (defaults)"
+mkdir -p "$SANDBOX/.megalos"
 
 # --- Missing action or phase → exit 2.
 set +e

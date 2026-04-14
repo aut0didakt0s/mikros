@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Integration test: fresh install -> state files exist -> mikros.py gate works
+# Integration test: fresh install -> state files exist -> megalos.py gate works
 # Tests all four runtime detection scenarios via PATH manipulation.
 set -e
 cd "$(dirname "$0")/.."
@@ -17,24 +17,24 @@ TARGET_A="$WORK/target-a"
 mkdir -p "$TARGET_A"
 PATH="$BARE_PATH" bash "$HERE/install.sh" "$TARGET_A" 2>/dev/null
 
-assert_file_exists "$TARGET_A/.mikros/STATE.md"       "A: STATE.md seeded"
-assert_file_exists "$TARGET_A/.mikros/PROJECT.md"     "A: PROJECT.md seeded"
-assert_file_exists "$TARGET_A/.mikros/DECISIONS.md"   "A: DECISIONS.md seeded"
-assert_file_exists "$TARGET_A/.mikros/config"         "A: config seeded"
+assert_file_exists "$TARGET_A/.megalos/STATE.md"       "A: STATE.md seeded"
+assert_file_exists "$TARGET_A/.megalos/PROJECT.md"     "A: PROJECT.md seeded"
+assert_file_exists "$TARGET_A/.megalos/DECISIONS.md"   "A: DECISIONS.md seeded"
+assert_file_exists "$TARGET_A/.megalos/config"         "A: config seeded"
 assert_file_exists "$TARGET_A/.claude/settings.json"  "A: .claude copied"
 assert_file_exists "$TARGET_A/CLAUDE.md"              "A: both -> CLAUDE.md"
 assert_file_exists "$TARGET_A/GEMINI.md"              "A: both -> GEMINI.md"
-assert_file_exists "$TARGET_A/mikros.py"              "A: mikros.py copied"
+assert_file_exists "$TARGET_A/megalos.py"              "A: megalos.py copied"
 
-# Verify mikros.py gate discuss exits 0
-( cd "$TARGET_A" && python3 mikros.py gate discuss )
+# Verify megalos.py gate discuss exits 0
+( cd "$TARGET_A" && python3 megalos.py gate discuss )
 RC=$?
 assert_exit_code "0" "$RC" "A: gate discuss exits 0"
 
 # Verify STATE.md has correct defaults
-assert_file_contains "$TARGET_A/.mikros/STATE.md" "active_milestone:" "A: STATE has active_milestone"
-assert_file_contains "$TARGET_A/.mikros/STATE.md" "active_slice:"     "A: STATE has active_slice"
-assert_file_contains "$TARGET_A/.mikros/STATE.md" "loc_budget:"       "A: STATE has loc_budget"
+assert_file_contains "$TARGET_A/.megalos/STATE.md" "active_milestone:" "A: STATE has active_milestone"
+assert_file_contains "$TARGET_A/.megalos/STATE.md" "active_slice:"     "A: STATE has active_slice"
+assert_file_contains "$TARGET_A/.megalos/STATE.md" "loc_budget:"       "A: STATE has loc_budget"
 
 # --- Scenario B: claude only on PATH ------------------------------------
 STUB_B="$WORK/stub-b"

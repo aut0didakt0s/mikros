@@ -49,15 +49,15 @@ assert_file_exists "$TARGET/.claude/commands/plan-slice.md"                     
 assert_file_exists "$TARGET/.claude/commands/execute-task.md"                     "/execute-task command copied"
 assert_file_exists "$TARGET/.claude/commands/sniff-test.md"                       "/sniff-test command copied"
 assert_file_exists "$TARGET/.claude/commands/compress.md"                         "/compress command copied"
-assert_file_exists "$TARGET/.mikros/STATE.md"                                     "STATE.md seeded"
-assert_file_exists "$TARGET/.mikros/PROJECT.md"                                   "PROJECT.md seeded"
-assert_file_exists "$TARGET/.mikros/DECISIONS.md"                                 "DECISIONS.md seeded"
-assert_file_exists "$TARGET/.mikros/config"                                       ".mikros/config seeded"
-assert_file_exists "$TARGET/.mikros/templates/T-PLAN.md.tmpl"                     "templates dir copied"
-assert_file_exists "$TARGET/.mikros/templates/config.tmpl"                        "config template copied"
+assert_file_exists "$TARGET/.megalos/STATE.md"                                     "STATE.md seeded"
+assert_file_exists "$TARGET/.megalos/PROJECT.md"                                   "PROJECT.md seeded"
+assert_file_exists "$TARGET/.megalos/DECISIONS.md"                                 "DECISIONS.md seeded"
+assert_file_exists "$TARGET/.megalos/config"                                       ".megalos/config seeded"
+assert_file_exists "$TARGET/.megalos/templates/T-PLAN.md.tmpl"                     "templates dir copied"
+assert_file_exists "$TARGET/.megalos/templates/config.tmpl"                        "config template copied"
 assert_file_exists "$TARGET/.claude/lib/caveman-phase.sh"                         "caveman-phase.sh helper copied"
-assert_file_contains "$TARGET/.mikros/config" "caveman_mode=on"                   "seeded config has caveman_mode"
-assert_file_contains "$TARGET/.mikros/config" "caveman_phases=execute-task,sniff-test,compress" \
+assert_file_contains "$TARGET/.megalos/config" "caveman_mode=on"                   "seeded config has caveman_mode"
+assert_file_contains "$TARGET/.megalos/config" "caveman_phases=execute-task,sniff-test,compress" \
     "seeded config has default phases"
 
 # --- Assertions: caveman + docmancer install calls happened (tools present)
@@ -78,8 +78,8 @@ OUTPUT="$(PATH="$MINIMAL_PATH" bash "$HERE/install.sh" "$TARGET2" 2>&1)"
 # --- Files still land correctly without any tools
 assert_file_exists "$TARGET2/CLAUDE.md"                                           "no-tools: CLAUDE.md copied"
 assert_file_exists "$TARGET2/.claude/settings.json"                               "no-tools: settings.json copied"
-assert_file_exists "$TARGET2/.mikros/STATE.md"                                    "no-tools: STATE.md seeded"
-assert_file_exists "$TARGET2/.mikros/config"                                      "no-tools: config seeded"
+assert_file_exists "$TARGET2/.megalos/STATE.md"                                    "no-tools: STATE.md seeded"
+assert_file_exists "$TARGET2/.megalos/config"                                      "no-tools: config seeded"
 assert_file_exists "$TARGET2/.claude/agents/phase-builder.md"                     "no-tools: phase-builder.md copied"
 
 # --- No warning messages printed for absent tools
