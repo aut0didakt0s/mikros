@@ -1,17 +1,17 @@
-# Deploying a mikrós domain server to Horizon
+# Deploying a megálos domain server to Horizon
 
-This page is the mikrós-specific overlay on top of FastMCP's Horizon
+This page is the megálos-specific overlay on top of FastMCP's Horizon
 deployment docs. For the full visual walk-through, read
 <https://gofastmcp.com/deployment/prefect-horizon>. Everything below covers
-only what is specific to a mikrós domain repo (entrypoint, git-pinned
+only what is specific to a megálos domain repo (entrypoint, git-pinned
 runtime, smoke test, Remix composition).
 
 ## Prerequisites
 
 - A Horizon account at <https://horizon.prefect.io/>.
 - Push access to a domain repo under `github.com/agora-creations/` (e.g.
-  `mikros-writing`, `mikros-analysis`, `mikros-professional`).
-- The repo follows the standard mikrós domain layout at its root:
+  `megalos-writing`, `megalos-analysis`, `megalos-professional`).
+- The repo follows the standard megálos domain layout at its root:
   - `main.py` exporting `mcp` (the FastMCP server instance).
   - `pyproject.toml` pinning `megalos-server @ git+https://github.com/agora-creations/megalos.git@v0.2.0`.
   - `Dockerfile`.
@@ -59,15 +59,15 @@ use.
 exits 0 only if every `--expected` workflow is present:
 
 ```sh
-python3 scripts/smoke_endpoint.py https://mikros-writing.fastmcp.app/mcp \
+python3 scripts/smoke_endpoint.py https://megalos-writing.fastmcp.app/mcp \
     --expected essay blog
 ```
 
 Expected domain inventories:
 
-- `mikros-writing` → `essay blog`
-- `mikros-analysis` → `research decision`
-- `mikros-professional` → `coding`
+- `megalos-writing` → `essay blog`
+- `megalos-analysis` → `research decision`
+- `megalos-professional` → `coding`
 
 A zero exit with `OK: all N expected workflow(s) present …` means the
 deploy is wired correctly. Any non-zero exit prints a one-line error on
@@ -104,7 +104,7 @@ it, verify but do not modify its entrypoint config.
   warnings).
 
 - **Entrypoint mismatch (stale `server/main.py:mcp`).**
-  Pre-split mikrós used `server/main.py:mcp`. Post-split domain repos use
+  Pre-split megálos used `server/main.py:mcp`. Post-split domain repos use
   `main.py:mcp` at repo root. If Horizon is pointing at the old path, edit
   the server config → **Entrypoint** field → set to `main.py:mcp` → redeploy.
 
