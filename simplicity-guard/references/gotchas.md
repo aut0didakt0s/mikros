@@ -6,9 +6,9 @@ Append failure modes here: `## YYYY-MM-DD — title`, then **Failure:**, **Root 
 
 ## 2026-04-14 — Shared module-level WORKFLOWS dict pollutes negative test assertions
 
-**Failure:** `test_list_workflows.test_list_all` initially tried to assert that demo workflows were absent from the MCP `list_workflows` response. The assertion failed because other test modules inject demos into the module-level `WORKFLOWS` dict (imported from `mikros_server.main`) during their `setup_function`/`setup_method`, and pytest shares the process across modules. Alphabetical test ordering ran the demo-injecting modules before `test_list_workflows`, so by the time `test_list_all` ran the shared dict already had the injected demos.
+**Failure:** `test_list_workflows.test_list_all` initially tried to assert that demo workflows were absent from the MCP `list_workflows` response. The assertion failed because other test modules inject demos into the module-level `WORKFLOWS` dict (imported from `megalos_server.main`) during their `setup_function`/`setup_method`, and pytest shares the process across modules. Alphabetical test ordering ran the demo-injecting modules before `test_list_workflows`, so by the time `test_list_all` ran the shared dict already had the injected demos.
 
-**Root cause:** The `WORKFLOWS` dict is a single shared mutable object that the MCP tool closures observe by reference (this is the documented `mcp._mikros_workflows` escape-hatch pattern from M006). Any test that mutates it leaks state into every later test in the same pytest session.
+**Root cause:** The `WORKFLOWS` dict is a single shared mutable object that the MCP tool closures observe by reference (this is the documented `mcp._megalos_workflows` escape-hatch pattern from M006). Any test that mutates it leaks state into every later test in the same pytest session.
 
 **Rule added:** Negative assertions ("X is NOT in the workflow set") cannot be made by querying the MCP tool surface. Use filesystem layout checks (`os.listdir(workflows_dir)`) or `BUILT_IN_NAMES`-style constants in `test_create_app.py` instead. If a test must mutate `WORKFLOWS`, document the mutation as a session-wide side effect — do not assume it gets undone between tests.
 

@@ -34,7 +34,7 @@ Each entry in `steps` is a mapping with:
 - Each step must contain all five required step keys.
 - `gates` and `anti_patterns` must each be lists.
 
-Multiple errors are reported at once when using `python3 -m mikros_server.validate`.
+Multiple errors are reported at once when using `python3 -m megalos_server.validate`.
 
 ## Schema versioning
 
@@ -46,7 +46,7 @@ Future schema changes will bump this value explicitly. Unrecognized values pass 
 
 ## Global DO NOT rules
 
-Every tool response from the mikrós MCP server includes a fixed list of behavioural rules the LLM must follow. These are hardcoded in `mikros_server/tools.py` as the `_DO_NOT_RULES` constant and are injected into every step response. They are not configurable per workflow today.
+Every tool response from the megálos MCP server includes a fixed list of behavioural rules the LLM must follow. These are hardcoded in `megalos_server/tools.py` as the `_DO_NOT_RULES` constant and are injected into every step response. They are not configurable per workflow today.
 
 The current rules (verbatim):
 
@@ -77,7 +77,7 @@ The distinction: step *sequence* is code-enforced; gate *content* is LLM-interpr
 
 ## Built-in workflow examples
 
-The five built-in workflows in `mikros_server/workflows/` illustrate the schema:
+The five built-in workflows in `megalos_server/workflows/` illustrate the schema:
 
 - **coding** -- `category: professional`, `output_format: structured_code`. Six steps from intent capture to delivery.
 - **essay** -- `category: writing_communication`, `output_format: text`. Guided essay from exploration to polished prose.

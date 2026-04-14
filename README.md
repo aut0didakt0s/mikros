@@ -1,6 +1,6 @@
-# mikrós
+# megálos
 
-> μικρός (ancient Greek: *small*)
+> μεγάλος (ancient Greek: *big*, *great*)
 
 **A platform for authoring deterministic AI conversations.** YAML is the source code. An MCP server is the runtime. The LLM is a replaceable text engine that gets constrained, not unleashed.
 
@@ -18,6 +18,7 @@
 - [MCP servers](#mcp-servers)
 - [Authoring a new domain repo](#authoring-a-new-domain-repo)
 - [simplicity-guard](#simplicity-guard)
+- [mikrós — future agent-skills library](#mikrós--future-agent-skills-library)
 - [The iron rule](#the-iron-rule)
 - [Optional plugins](#optional-plugins)
 - [License](#license)
@@ -25,41 +26,41 @@
 
 ## Installation
 
-Add the mikrós MCP server as a connector in any MCP-compatible client — no install or local setup needed.
+Add the megálos MCP server as a connector in any MCP-compatible client — no install or local setup needed.
 
 **Claude web**
 ```
-https://Mikros.fastmcp.app/mcp
+https://Megalos.fastmcp.app/mcp
 ```
 
 **Claude desktop**
 ```
-https://Mikros.fastmcp.app/manifest.dxt?v=642267e3-c18f-42ae-b301-f18b234668a2
+https://Megalos.fastmcp.app/manifest.dxt?v=642267e3-c18f-42ae-b301-f18b234668a2
 ```
 
 **Claude Code**
 ```
-claude mcp add --scope local --transport http Mikros https://Mikros.fastmcp.app/mcp
+claude mcp add --scope local --transport http Megalos https://Megalos.fastmcp.app/mcp
 ```
 
 **Codex**
 ```
-codex mcp add --url https://Mikros.fastmcp.app/mcp Mikros
+codex mcp add --url https://Megalos.fastmcp.app/mcp Megalos
 ```
 
 **Gemini CLI**
 ```
-gemini mcp add Mikros https://Mikros.fastmcp.app/mcp --transport http
+gemini mcp add Megalos https://Megalos.fastmcp.app/mcp --transport http
 ```
 
 **Cursor**
 ```
-cursor://anysphere.cursor-deeplink/mcp/install?name=Mikros&config=eyJ1cmwiOiJodHRwczovL01pa3Jvcy5mYXN0bWNwLmFwcC9tY3AifQ%3D%3D
+cursor://anysphere.cursor-deeplink/mcp/install?name=Megalos&config=eyJ1cmwiOiJodHRwczovL01lZ2Fsb3MuZmFzdG1jcC5hcHAvbWNwIn0%3D
 ```
 
 **VS Code**
 ```
-code --add-mcp "{\"name\":\"Mikros\",\"type\":\"http\",\"url\":\"https://Mikros.fastmcp.app/mcp\"}"
+code --add-mcp "{\"name\":\"Megalos\",\"type\":\"http\",\"url\":\"https://Megalos.fastmcp.app/mcp\"}"
 ```
 
 ## The thesis
@@ -72,13 +73,13 @@ Determinism comes from gates in the runtime, not from prompt engineering. The MC
 
 | Layer | What it is | Status |
 |-------|------------|--------|
-| **mikrós** (this repo) | YAML schema, MCP server runtime (`mikros-server` package), validation tooling, simplicity-guard | live |
-| **mikrós-{domain}** | Per-domain MCP servers built on the runtime | live: writing, analysis, professional |
+| **megálos** (this repo) | YAML schema, MCP server runtime (`megalos-server` package), validation tooling, simplicity-guard | live |
+| **megálos-{domain}** | Per-domain MCP servers built on the runtime | live: writing, analysis, professional |
 | **agora-creations** | Bring-your-own-key chat client (BYOK) | future |
 
 ## The YAML schema
 
-The schema is the API surface. One YAML file = one workflow. Add a workflow by adding a file, not by writing code. Full reference in [`mikros_server/SCHEMA.md`](mikros_server/SCHEMA.md).
+The schema is the API surface. One YAML file = one workflow. Add a workflow by adding a file, not by writing code. Full reference in [`megalos_server/SCHEMA.md`](megalos_server/SCHEMA.md).
 
 Top level: `schema_version` (optional, defaults to `0.1`), `name`, `description`, `category`, `output_format`, `steps`, optional `guardrails`.
 Per step: `id`, `title`, `directive_template`, `gates`, `anti_patterns`, optional `output_schema`, `inject_context`, `directives`, `branches`, `intermediate_artifacts`.
@@ -86,17 +87,17 @@ Per step: `id`, `title`, `directive_template`, `gates`, `anti_patterns`, optiona
 Validate any workflow file:
 
 ```bash
-python -m mikros_server.validate path/to/workflow.yaml
+python -m megalos_server.validate path/to/workflow.yaml
 ```
 
 ## The MCP server runtime
 
-Distribution: `mikros-server`. Import: `mikros_server`. Two runtime dependencies: `fastmcp` and `pyyaml` (plus `jsonschema` for output validation).
+Distribution: `megalos-server`. Import: `megalos_server`. Two runtime dependencies: `fastmcp` and `pyyaml` (plus `jsonschema` for output validation).
 
 ### Public API
 
 ```python
-from mikros_server import create_app
+from megalos_server import create_app
 
 mcp = create_app(workflow_dir="./workflows")  # defaults to bundled example.yaml
 mcp.run(transport="streamable-http")
@@ -107,11 +108,11 @@ Domain repos and downstream consumers depend on the runtime via a pinned git URL
 ```toml
 [project]
 dependencies = [
-    "mikros-server @ git+https://github.com/agora-creations/mikros.git@v0.1.0",
+    "megalos-server @ git+https://github.com/agora-creations/megalos.git@v0.2.0",
 ]
 ```
 
-Local development override: `pip install -e ../mikros`.
+Local development override: `pip install -e ../megalos`.
 
 ### MCP tools (9)
 
@@ -135,22 +136,22 @@ In-memory dict store. Sessions have `session_id`, `workflow_type`, `current_step
 
 ## MCP servers
 
-Workflows are grouped by **category**, and each category lives in its own MCP server (a thin wrapper around `mikros-server` that exposes the workflows for that category). Mix and match — connect to one server, several, or all, depending on the kinds of work you want structured:
+Workflows are grouped by **category**, and each category lives in its own MCP server (a thin wrapper around `megalos-server` that exposes the workflows for that category). Mix and match — connect to one server, several, or all, depending on the kinds of work you want structured:
 
 | Server | Category | Workflows | Remote |
 |--------|----------|-----------|--------|
-| `mikros-writing` | writing & communication | essay, blog | [github.com/agora-creations/mikros-writing](https://github.com/agora-creations/mikros-writing) |
-| `mikros-analysis` | analysis & decision | research, decision | [github.com/agora-creations/mikros-analysis](https://github.com/agora-creations/mikros-analysis) |
-| `mikros-professional` | professional | coding | [github.com/agora-creations/mikros-professional](https://github.com/agora-creations/mikros-professional) |
+| `megalos-writing` | writing & communication | essay, blog | [github.com/agora-creations/megalos-writing](https://github.com/agora-creations/megalos-writing) |
+| `megalos-analysis` | analysis & decision | research, decision | [github.com/agora-creations/megalos-analysis](https://github.com/agora-creations/megalos-analysis) |
+| `megalos-professional` | professional | coding | [github.com/agora-creations/megalos-professional](https://github.com/agora-creations/megalos-professional) |
 
-This repo itself bundles only `mikros_server/workflows/example.yaml` as a reference workflow plus `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures exercising M004/M005 features). Production workflows live exclusively in their category-specific repos.
+This repo itself bundles only `megalos_server/workflows/example.yaml` as a reference workflow plus `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures exercising M004/M005 features). Production workflows live exclusively in their category-specific repos.
 
 ## Authoring a new domain repo
 
 The pattern is mechanical. Replicate one of the existing domain repos and:
 
 1. Create an empty GitHub repo.
-2. Clone, populate with `pyproject.toml` (pin to `mikros-server@vX.Y.Z`), flat `main.py` calling `create_app(workflow_dir=Path(__file__).parent / "workflows")`, your YAML files under `workflows/`, tests under `tests/` (with their own conftest constructing an mcp via `create_app(workflow_dir=...)`).
+2. Clone, populate with `pyproject.toml` (pin to `megalos-server@vX.Y.Z`), flat `main.py` calling `create_app(workflow_dir=Path(__file__).parent / "workflows")`, your YAML files under `workflows/`, tests under `tests/` (with their own conftest constructing an mcp via `create_app(workflow_dir=...)`).
 3. `pip install -e ".[test]" && pytest && python main.py` to verify.
 4. Push.
 
@@ -164,6 +165,10 @@ The anti-bloat skill at `simplicity-guard/`. Standalone — works with both Clau
 - **Gemini CLI:** Reference `simplicity-guard/gemini-extension.json` in your settings
 
 Enforces explicit anti-defaults: no enterprise patterns, no premature abstractions (three-strikes rule), no dataclass for internal data, flat over nested config, boring beats clever, and the iron rule.
+
+## mikrós — future agent-skills library
+
+mikrós (ancient Greek: *small*) is a separate, future project: a lightweight agent-skills library for coding agents, inspired by [RasaHQ/rasa-agent-skills](https://github.com/RasaHQ/rasa-agent-skills). It will be a collection of markdown skill files that teach a coding agent how to author, test, and deploy megálos workflows. It is not a package, not a runtime, and not a deployment — just knowledge in the shape an agent can read. This repo (megálos) is the platform; mikrós is the way agents learn to use it.
 
 ## The iron rule
 

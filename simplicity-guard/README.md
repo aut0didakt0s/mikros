@@ -35,10 +35,10 @@ Copy this directory into your project and reference it in `.gemini/settings.json
 Set the LOC budget via environment variable:
 
 ```
-export MIKROS_LOC_BUDGET=200
+export MEGALOS_LOC_BUDGET=200
 ```
 
-Or let the script read `loc_budget:` from `.mikros/STATE.md` if present. Default is 300 lines.
+Or let the script read `loc_budget:` from `.megalos/STATE.md` if present. Default is 300 lines.
 
 ## Files
 

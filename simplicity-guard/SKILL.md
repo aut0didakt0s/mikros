@@ -27,7 +27,7 @@ bash scripts/loc-budget.sh
 
 It exits 2 if the LOC budget has been exceeded. On exit 2, **stop writing code** and return with a split request — the post-edit hook will already have blocked the edit.
 
-Set the budget via the `MIKROS_LOC_BUDGET` environment variable. Default is 300 lines.
+Set the budget via the `MEGALOS_LOC_BUDGET` environment variable. Default is 300 lines.
 
 ## The three-strikes rule
 
