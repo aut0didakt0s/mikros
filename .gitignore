@@ -30,6 +30,7 @@ megalos.py
 CLAUDE.md
 GEMINI.md
 install.sh
+.claude/
 
 # megálos runtime state (per-project, not shared)
 .megalos/
