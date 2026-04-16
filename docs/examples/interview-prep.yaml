@@ -1,0 +1,104 @@
+# interview-prep.yaml — Teaching artifact for the megálos authoring guide.
+#
+# This file is the finished worked example from docs/AUTHORING.md section 4.
+# It is NOT a production workflow — do not move it into a domain repo, and do
+# not register it with a running server. It exists so readers of the guide can
+# open the completed file in their editor after following the walkthrough.
+#
+# Validate: python -m megalos_server.validate docs/examples/interview-prep.yaml
+
+name: interview_prep
+description: Guide a candidate through role-targeted interview preparation.
+category: teaching_example
+output_format: text
+
+steps:
+  - id: identify_role
+    title: Identify the Target Role
+    step_description: Collect the target role, experience level, and company name before any preparation work.
+    directive_template: >-
+      Ask the user which role they are preparing for, their current experience
+      level, and the company name. Ask for one piece of information at a time.
+      Do not begin research or question generation until all three are captured.
+    collect: true
+    output_schema:
+      type: object
+      required: [target_role, experience_level, company_name]
+      properties:
+        target_role:
+          type: string
+          minLength: 2
+        experience_level:
+          type: string
+          minLength: 2
+        company_name:
+          type: string
+          minLength: 2
+    gates:
+      - User has stated a concrete target role
+      - User has stated an experience level
+      - User has stated a company name
+    anti_patterns:
+      - Inferring the role from prior conversation
+      - Asking for all three fields in a single question
+
+  - id: research_company
+    title: Research the Company Angle
+    step_description: Synthesise what matters about the company from an interviewer's point of view for the target role.
+    directive_template: >-
+      Using the role and company captured in identify_role, produce a short
+      brief (no more than six bullets) on what an interviewer at this company
+      is likely to care about for this role. Do not invent facts the user did
+      not supply; if a detail is unknown, name it as an open question instead.
+    directives:
+      tone: Grounded and specific; no marketing language.
+    gates:
+      - Brief names at least three role-relevant interview concerns
+      - Unknown facts are flagged as open questions, not fabricated
+    anti_patterns:
+      - Generic advice that would apply to any company
+      - Inventing company facts the user did not provide
+
+  - id: practice_questions
+    title: Generate Three Practice Questions
+    directive_template: >-
+      Produce exactly three interview questions the candidate should be ready
+      for, grounded in the role and the company brief. Each question must be a
+      single sentence and target a distinct competency (technical, behavioural,
+      or role-fit). Do not produce answers yet.
+    gates:
+      - Exactly three questions are produced
+      - Each question targets a distinct competency
+    anti_patterns:
+      - Producing more than three questions
+      - Answering the questions in the same turn
+
+  - id: refine_answers
+    title: Refine the Candidate's Draft Answers
+    directive_template: >-
+      Ask the user to draft a short answer to each of the three practice
+      questions, one at a time. For each draft, respond with one concrete
+      improvement focused on specificity — a missing metric, a vague verb to
+      replace, or an outcome to name. Do not rewrite the answer for them.
+    directives:
+      strategy: Push for specificity; name one fix per draft, never a full rewrite.
+    gates:
+      - User has drafted an answer to each of the three questions
+      - Each draft received a single, specific improvement suggestion
+    anti_patterns:
+      - Rewriting the user's answer in full
+      - Offering more than one fix per draft
+
+  - id: mock_interview
+    title: Short Mock Interview Exchange
+    directive_template: >-
+      Deliver a three-turn mock interview: ask one of the three practice
+      questions as an interviewer would, let the user respond, then give a
+      single piece of feedback grounded in the refined answer from the prior
+      step. Close the workflow after one full cycle.
+    gates:
+      - Exactly one question is asked in interviewer voice
+      - Feedback references the user's refined answer, not a generic model answer
+    anti_patterns:
+      - Running more than one full mock cycle in a single step
+      - Stepping out of the interviewer role mid-turn
