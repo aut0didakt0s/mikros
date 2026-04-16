@@ -74,7 +74,19 @@ dependencies = [
 
 Local development override: `pip install -e ../megalos`.
 
-### MCP tools (9)
+## MCP servers
+
+Workflows are grouped by **category**, and each category lives in its own MCP server (a thin wrapper around `megalos-server` that exposes the workflows for that category). Mix and match — connect to one server, several, or all, depending on the kinds of work you want structured:
+
+| Server | Category | Workflows | Remote |
+|--------|----------|-----------|--------|
+| `megalos-writing` | writing & communication | essay, blog | [github.com/agora-creations/megalos-writing](https://github.com/agora-creations/megalos-writing) |
+| `megalos-analysis` | analysis & decision | research, decision | [github.com/agora-creations/megalos-analysis](https://github.com/agora-creations/megalos-analysis) |
+| `megalos-professional` | professional | coding | [github.com/agora-creations/megalos-professional](https://github.com/agora-creations/megalos-professional) |
+
+This repo itself bundles only `megalos_server/workflows/example.yaml` as a reference workflow plus `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures). Production workflows live exclusively in their category-specific repos.
+
+### MCP tools
 
 `list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `revise_step`, `list_sessions`, `delete_session`, `generate_artifact`.
 
@@ -93,18 +105,6 @@ The server never calls any LLM. Zero LLM imports, zero provider references. Tool
 ### Session state
 
 In-memory dict store. Sessions have `session_id`, `workflow_type`, `current_step`, `step_data`, timestamps. Cap of 5 active sessions, TTL-based expiration. No SQLite, no external state store — keeps the runtime trivially deployable.
-
-## MCP servers
-
-Workflows are grouped by **category**, and each category lives in its own MCP server (a thin wrapper around `megalos-server` that exposes the workflows for that category). Mix and match — connect to one server, several, or all, depending on the kinds of work you want structured:
-
-| Server | Category | Workflows | Remote |
-|--------|----------|-----------|--------|
-| `megalos-writing` | writing & communication | essay, blog | [github.com/agora-creations/megalos-writing](https://github.com/agora-creations/megalos-writing) |
-| `megalos-analysis` | analysis & decision | research, decision | [github.com/agora-creations/megalos-analysis](https://github.com/agora-creations/megalos-analysis) |
-| `megalos-professional` | professional | coding | [github.com/agora-creations/megalos-professional](https://github.com/agora-creations/megalos-professional) |
-
-This repo itself bundles only `megalos_server/workflows/example.yaml` as a reference workflow plus `tests/fixtures/workflows/` (one canonical 3-step framework fixture plus seven demo fixtures exercising M004/M005 features). Production workflows live exclusively in their category-specific repos.
 
 ## Authoring a new domain repo
 

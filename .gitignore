@@ -29,12 +29,17 @@ docs/competitive-landscape-2026-04-16.md
 # Private build process — how megálos is developed, not shipped to users
 megalos.py
 CLAUDE.md
+CLAUDE.original.md
 GEMINI.md
 install.sh
 .claude/
+.bg-shell/
 
-# megálos runtime state (per-project, not shared)
+# megálos runtime state (per-project, not shared — frozen archive)
 .megalos/
+
+# GSD-2 runtime state (per-project, not shared)
+.gsd/
 
 # Build artifacts
 *.egg-info/

@@ -1,10 +1,8 @@
 # interview-prep.yaml — Teaching artifact for the megálos authoring guide.
 #
 # This file is the finished worked example from docs/AUTHORING.md section 4.
-# It is NOT a production workflow — do not move it into a domain repo, and do
-# not register it with a running server. It exists so readers of the guide can
+# It is NOT a production workflow. It exists so readers of the guide can
 # open the completed file in their editor after following the walkthrough.
-#
 # Validate: python -m megalos_server.validate docs/examples/interview-prep.yaml
 
 name: interview_prep
