@@ -7,15 +7,7 @@ dict each call; in-place mutations do not persist. Persist via update_session
 
 import pytest  # type: ignore[import-not-found]
 
-from megalos_server import db, state
-
-
-@pytest.fixture(autouse=True)
-def fresh_db(monkeypatch):
-    monkeypatch.setenv("MEGALOS_DB_PATH", ":memory:")
-    db._reset_for_test()
-    yield
-    db._reset_for_test()
+from megalos_server import state
 
 
 def test_get_session_returns_detached_snapshot():
