@@ -1,76 +1,49 @@
 # megalos MCP Server
 
-Workflow-driven MCP server for structured workflows. Built with FastMCP, deployed to Prefect Horizon.
+Workflow-driven MCP server runtime. Built with FastMCP. This repo ships the runtime library (`megalos-server`) plus a single reference workflow (`example.yaml`). The production workflows live in separate domain repos — see below.
 
-## Quick Start (2 minutes)
+## Using the production workflows
 
-1. Go to [claude.ai](https://claude.ai) > Settings > Connectors > Add custom connector
-2. Paste the server URL:
-   ```
-   https://Megalos.fastmcp.app/mcp
-   ```
-3. Done. Try one of these prompts:
+This runtime has no hosted endpoint of its own. To use the production workflows, add one of the three domain-repo MCP servers as a connector:
 
-**Coding:** "I want to build a CLI tool that converts CSV files to JSON"
+| Domain | Workflows | MCP endpoint |
+|--------|-----------|--------------|
+| [megalos-writing](https://github.com/agora-creations/megalos-writing) | essay, blog | `https://megalos-writing.fastmcp.app/mcp` |
+| [megalos-analysis](https://github.com/agora-creations/megalos-analysis) | research, decision | `https://megalos-analysis.fastmcp.app/mcp` |
+| [megalos-professional](https://github.com/agora-creations/megalos-professional) | coding | `https://megalos-professional.fastmcp.app/mcp` |
 
-**Essay:** "I want to write an essay about why remote work is better for deep work"
-
-Claude will guide you through a structured workflow, one step at a time.
+Each domain repo's README has the exact connector-add commands for Claude web, Claude desktop, Claude Code, and Codex.
 
 ## How It Works
 
-The server exposes 8 MCP tools: `list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `list_sessions`, `delete_session`, `generate_artifact`.
+The server exposes 9 MCP tools: `list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `revise_step`, `list_sessions`, `delete_session`, `generate_artifact`.
 
 When you start a workflow, Claude walks you through each step in order. Tool responses include explicit directives telling Claude what to do (and what NOT to do) at each step.
 
 ## Workflows
 
-| Workflow | Category | Steps | Output |
-|----------|----------|-------|--------|
-| coding   | professional | 6 (discuss, plan, execute, review, iterate, deliver) | code |
-| essay    | writing_communication | 6 (explore, commit, structure, draft, revise, polish) | text |
-| blog     | writing_communication | 6 (angle, audience, outline, draft, revise, polish) | text |
-| research | analysis_decision | 6 (frame, gather, evaluate, synthesize, structure, refine) | text |
-| decision | analysis_decision | 6 (frame, options, tradeoffs, stress_test, decide, document) | text |
+The production workflows below are **not bundled with this repo** — each lives in its own domain repo listed in the "Using the production workflows" table.
 
-### Coding Workflow Steps
+| Workflow | Lives in | Category | Steps | Output |
+|----------|----------|----------|-------|--------|
+| coding   | megalos-professional | professional | 6 (discuss, plan, execute, review, iterate, deliver) | code |
+| essay    | megalos-writing | writing_communication | 6 (explore, commit, structure, draft, revise, polish) | text |
+| blog     | megalos-writing | writing_communication | 6 (angle, audience, outline, draft, revise, polish) | text |
+| research | megalos-analysis | analysis_decision | 6 (frame, gather, evaluate, synthesize, structure, refine) | text |
+| decision | megalos-analysis | analysis_decision | 6 (frame, options, tradeoffs, stress_test, decide, document) | text |
 
-1. **Discuss** — Capture intent: goal, constraints, definition of done
-2. **Plan** — Decompose into components and file structure
-3. **Execute** — Write the implementation code
-4. **Review** — Review code for correctness and simplicity
-5. **Iterate** — Refine based on review feedback
-6. **Deliver** — Produce the final artifact
+### Reference workflow: `example.yaml`
 
-### Essay Workflow Steps
+The only workflow bundled in this repo is [`megalos_server/workflows/example.yaml`](workflows/example.yaml) — a minimal 2-step reference (`clarify` → `respond`) used by the framework tests. It demonstrates the core schema features in the smallest viable form: required top-level fields, two step shapes, a `collect: true` step with an `output_schema`, and `step_description` on each step.
 
-1. **Explore** — Brainstorm and research the topic
-2. **Commit** — Lock in a thesis and angle
-3. **Structure** — Create an outline
-4. **Draft** — Write the first draft
-5. **Revise** — Improve clarity and argument strength
-6. **Polish** — Final editing pass
-
-## Try It
-
-### Coding Example
-
-You: "I want to build a CLI that converts CSV to JSON"
-
-Claude will guide you through all 6 coding steps — from capturing your intent to delivering the final code.
-
-### Essay Example
-
-You: "I want to write about why remote work is better for deep work"
-
-Claude will guide you through all 6 essay steps — from exploring angles to polishing the final draft.
+It is intentionally not production-grade. Authoring your own workflow? Read [`SCHEMA.md`](SCHEMA.md) for the YAML spec, then copy `example.yaml` as a starting shape and grow from there.
 
 ## Local Development
 
 ```bash
 uv sync
-uv run python -m server.main          # streamable HTTP on port 8000
-uv run fastmcp inspect server/main.py:mcp  # verify tools
+uv run python -m megalos_server.main              # streamable HTTP on port 8000
+uv run fastmcp inspect megalos_server/main.py:mcp # verify tools
 ```
 
 Reads `FASTMCP_HOST` (default `127.0.0.1`) and `FASTMCP_PORT` (default `8000`) from env.
