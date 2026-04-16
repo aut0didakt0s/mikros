@@ -215,5 +215,7 @@ def test_step_visit_counts():
     assert session["step_visit_counts"]["gather"] == 1
 
     call_tool("submit_step", {"session_id": sid, "step_id": "gather", "content": "info"})
-    # After submitting gather, "decide" should have visit count 1
+    # After submitting gather, "decide" should have visit count 1.
+    # Re-fetch: get_session returns a detached snapshot, not a live alias.
+    session = state.get_session(sid)
     assert session["step_visit_counts"]["decide"] == 1

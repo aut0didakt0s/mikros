@@ -196,11 +196,9 @@ def test_generate_artifact_oversize_artifact():
     # Stash big content directly into step_data and force COMPLETE — same trick as
     # tests/test_size_limits.py. Each step content stays under CONTENT_MAX, but the
     # joined artifact exceeds ARTIFACT_MAX.
-    session = state.get_session(sid)
     big_chunk = "z" * 600_000
-    session["step_data"]["first"] = big_chunk
-    session["step_data"]["second"] = big_chunk
-    state.update_session(sid, current_step=state.COMPLETE)
+    new_step_data = {"first": big_chunk, "second": big_chunk}
+    state.update_session(sid, step_data=new_step_data, current_step=state.COMPLETE)
 
     r = call_tool("generate_artifact", {"session_id": sid, "output_format": "text"})
     assert isinstance(r, dict)

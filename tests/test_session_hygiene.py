@@ -63,7 +63,7 @@ def test_expire_deletes_old_sessions():
     sid = state.create_session("test_wf", current_step="step1")
     # Backdate updated_at by 25 hours
     old_time = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
-    state._sessions[sid]["updated_at"] = old_time
+    state._set_updated_at_for_test(sid, old_time)
 
     expired = state.expire_sessions(ttl_hours=24)
     assert sid in expired
@@ -80,7 +80,7 @@ def test_expire_keeps_fresh_sessions():
 def test_expire_cleans_completed_sessions_too():
     sid = state.create_session("test_wf", current_step=state.COMPLETE)
     old_time = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
-    state._sessions[sid]["updated_at"] = old_time
+    state._set_updated_at_for_test(sid, old_time)
 
     expired = state.expire_sessions(ttl_hours=24)
     assert sid in expired

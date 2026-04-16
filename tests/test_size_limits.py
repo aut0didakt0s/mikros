@@ -68,11 +68,9 @@ def test_generate_artifact_rejects_oversize_artifact():
 
     # Each step content is just under CONTENT_MAX; sum of 5 fills > ARTIFACT_MAX (1_048_576).
     # Two steps × ~250_000 bytes is only ~500KB, so we stash large content directly via state.
-    session = state.get_session(sid)
     big_chunk = "z" * 600_000
-    session["step_data"]["first"] = big_chunk
-    session["step_data"]["second"] = big_chunk
-    state.update_session(sid, current_step=state.COMPLETE)
+    new_step_data = {"first": big_chunk, "second": big_chunk}
+    state.update_session(sid, step_data=new_step_data, current_step=state.COMPLETE)
 
     r = call_tool("generate_artifact", {"session_id": sid, "output_format": "text"})
     assert r["status"] == "error"
