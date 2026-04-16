@@ -7,8 +7,6 @@ from pathlib import Path
 
 REQUIRED_STEP_KEYS = {"id", "title", "directive_template", "gates", "anti_patterns"}
 
-REPAIR_KEYS = {"on_go_back", "on_cancel", "on_digression", "on_clarification"}
-
 
 def _validate_step_optional_fields(step: dict, label: str, errors: list[str]) -> None:
     """Validate optional output_schema, max_retries, validation_hint on a step."""
@@ -148,9 +146,10 @@ def validate_workflow(path: str) -> tuple[list[str], dict | None]:
         if not isinstance(repair, dict):
             errors.append("conversation_repair must be a mapping")
         else:
+            repair_keys = {"on_go_back", "on_cancel", "on_digression", "on_clarification"}
             for k, v in repair.items():
-                if k not in REPAIR_KEYS:
-                    errors.append(f"conversation_repair has unknown key '{k}'; valid keys: {sorted(REPAIR_KEYS)}")
+                if k not in repair_keys:
+                    errors.append(f"conversation_repair has unknown key '{k}'; valid keys: {sorted(repair_keys)}")
                 elif not isinstance(v, str):
                     errors.append(f"conversation_repair['{k}'] must be a string")
     for key in ("name", "description", "category", "output_format"):
