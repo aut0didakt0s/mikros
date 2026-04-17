@@ -30,6 +30,106 @@ _CONVERSATION_REPAIR_DEFAULTS = {
 }
 
 
+class _SkippedPredecessor(Exception):
+    def __init__(self, sid: str, referencing_step_id: str):
+        self.sid = sid
+        self.referencing_step_id = referencing_step_id
+        super().__init__(
+            f"Step '{referencing_step_id}' precondition references skipped predecessor '{sid}'"
+        )
+
+
+_REF_ABSENT = object()
+
+
+def _resolve_ref(ref: str, step_data: dict, skipped_set: set[str], referencing_step_id: str):
+    """Resolve a `step_data.<sid>[.<field>...]` ref. Raise _SkippedPredecessor on cascade.
+    Return _REF_ABSENT if the predecessor/subpath is missing."""
+    parts = ref.split(".")
+    # parts[0] == "step_data" (guaranteed by schema parse-time validation)
+    sid = parts[1]
+    if sid in skipped_set:
+        raise _SkippedPredecessor(sid, referencing_step_id)
+    if sid not in step_data:
+        return _REF_ABSENT
+    if len(parts) == 2:
+        return step_data[sid]
+    try:
+        value = json.loads(step_data[sid])
+    except (json.JSONDecodeError, TypeError):
+        return _REF_ABSENT
+    for seg in parts[2:]:
+        if not isinstance(value, dict) or seg not in value:
+            return _REF_ABSENT
+        value = value[seg]
+    return value
+
+
+def _evaluate_precondition(
+    precondition: dict, step_data: dict, skipped_set: set[str], referencing_step_id: str
+) -> bool:
+    """Return True → run; False → skip. Raise _SkippedPredecessor on ref to skipped predecessor."""
+    if "when_equals" in precondition:
+        we = precondition["when_equals"]
+        resolved = _resolve_ref(we["ref"], step_data, skipped_set, referencing_step_id)
+        if resolved is _REF_ABSENT:
+            return False
+        return resolved == we["value"]
+    # when_present
+    ref = precondition["when_present"]
+    sid = ref.split(".")[1]
+    if sid in skipped_set:
+        raise _SkippedPredecessor(sid, referencing_step_id)
+    return sid in step_data
+
+
+def _compute_skipped_steps(wf: dict, step_data: dict) -> list[str]:
+    """Pure. Walk step list in order, computing skipped set from live step_data.
+    Swallow cascade errors — observability must not crash; treat as skipped."""
+    skipped: list[str] = []
+    skipped_set: set[str] = set()
+    for step in wf["steps"]:
+        sid = step["id"]
+        if sid in step_data:
+            continue
+        pc = step.get("precondition")
+        if pc is None:
+            continue
+        try:
+            runs = _evaluate_precondition(pc, step_data, skipped_set, referencing_step_id=sid)
+        except _SkippedPredecessor:
+            skipped.append(sid)
+            skipped_set.add(sid)
+            continue
+        if not runs:
+            skipped.append(sid)
+            skipped_set.add(sid)
+    return skipped
+
+
+def _apply_skip_loop(
+    next_step_id: str, wf: dict, step_data: dict, force_branched: bool
+) -> tuple[str, list[str]]:
+    """Phase 1: if force_branched, commit without precondition eval.
+    Phase 2: cascade — skip forward linearly while preconditions evaluate false."""
+    skipped: list[str] = []
+    if force_branched:
+        return next_step_id, skipped
+    skipped_set: set[str] = set(_compute_skipped_steps(wf, step_data))
+    steps = wf["steps"]
+    while next_step_id != _COMPLETE:
+        idx, step = _find_step(wf, next_step_id)
+        pc = step.get("precondition") if step else None
+        if pc is None:
+            return next_step_id, skipped
+        if _evaluate_precondition(pc, step_data, skipped_set, referencing_step_id=next_step_id):
+            return next_step_id, skipped
+        skipped.append(next_step_id)
+        skipped_set.add(next_step_id)
+        next_step_id = _COMPLETE if idx == len(steps) - 1 else steps[idx + 1]["id"]
+    return next_step_id, skipped
+
+
 def _check_str(value: object, name: str, *, required: bool = False) -> dict | None:
     """Return invalid_argument error_response if value isn't str (or empty when required)."""
     if not isinstance(value, str):
@@ -266,6 +366,9 @@ def register_tools(mcp, workflows):
             artifacts = state.get_artifacts(session_id, current["id"])
             if artifacts:
                 result["artifact_checkpoints"] = artifacts
+        skipped = _compute_skipped_steps(wf, session["step_data"])
+        if skipped:
+            result["skipped_steps"] = skipped
         return result
 
     @mcp.tool()
@@ -444,7 +547,9 @@ def register_tools(mcp, workflows):
                     guardrail_warning = fired_guardrail["message"]
 
             # Determine next step (same logic as non-artifact path)
-            if fired_guardrail and fired_guardrail["action"] == "force_branch":
+            force_branched = False
+            if fired_guardrail is not None and fired_guardrail["action"] == "force_branch":
+                force_branched = True
                 next_step_id = fired_guardrail["target_step"]
             elif step.get("branches"):
                 valid_targets = [b["next"] for b in step["branches"]]
@@ -461,6 +566,18 @@ def register_tools(mcp, workflows):
             else:
                 is_last = idx == len(steps) - 1
                 next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+
+            try:
+                next_step_id, _ = _apply_skip_loop(next_step_id, wf, step_data, force_branched)
+            except _SkippedPredecessor as e:
+                return error_response(
+                    "skipped_predecessor_reference",
+                    f"Step '{e.referencing_step_id}' precondition references skipped predecessor '{e.sid}'",
+                    session_id=session_id,
+                    step_id=step_id,
+                    referenced_step=e.sid,
+                    referencing_field="precondition",
+                )
 
             if next_step_id != _COMPLETE:
                 state.increment_visit(session_id, next_step_id)
@@ -545,7 +662,9 @@ def register_tools(mcp, workflows):
             # force_branch handled below during next-step determination
 
         # Determine next step: force_branch guardrail overrides everything
-        if fired_guardrail and fired_guardrail["action"] == "force_branch":
+        force_branched = False
+        if fired_guardrail is not None and fired_guardrail["action"] == "force_branch":
+            force_branched = True
             next_step_id = fired_guardrail["target_step"]
         elif step.get("branches"):
             valid_targets = [b["next"] for b in step["branches"]]
@@ -562,6 +681,18 @@ def register_tools(mcp, workflows):
         else:
             is_last = idx == len(steps) - 1
             next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+
+        try:
+            next_step_id, _ = _apply_skip_loop(next_step_id, wf, step_data, force_branched)
+        except _SkippedPredecessor as e:
+            return error_response(
+                "skipped_predecessor_reference",
+                f"Step '{e.referencing_step_id}' precondition references skipped predecessor '{e.sid}'",
+                session_id=session_id,
+                step_id=step_id,
+                referenced_step=e.sid,
+                referencing_field="precondition",
+            )
 
         # Track visit count for the next step
         if next_step_id != _COMPLETE:

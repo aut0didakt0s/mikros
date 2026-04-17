@@ -13,6 +13,7 @@ OUT_OF_ORDER_SUBMISSION = "out_of_order_submission"
 SESSION_ESCALATED = "session_escalated"
 WORKFLOW_COMPLETE = "workflow_complete"
 CONCURRENT_WRITE_CONFLICT = "concurrent_write_conflict"  # reserved for S02
+SKIPPED_PREDECESSOR_REFERENCE = "skipped_predecessor_reference"
 
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576
