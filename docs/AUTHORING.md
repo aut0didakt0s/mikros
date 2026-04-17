@@ -258,6 +258,8 @@ When `mode=fast` or `mode=skip`, `review` is skipped and the runtime falls throu
 
 **Semantics of a false precondition.** When a step's predicate evaluates false, the step is *absent* from `step_data`. Downstream `inject_context: [{from: <skipped_step>}]` receives `{content: null}`. Downstream `when_present: step_data.<skipped_step>` raises `skipped_predecessor_reference`. Downstream `when_equals` with a sub-path into the skipped step also raises the same cascade error. Author every downstream step for the absent case — either guard it with its own precondition or stop referencing the skipped predecessor.
 
+**LLM-judged skip (there is no `optional: true` verb).** If you want the LLM to decide whether a step applies based on conversational context it just observed — e.g., "skip this if the user already provided X earlier" — put that guidance in the step's `directive_template` itself. The LLM reads the directive, recognizes the condition, and either submits a short acknowledgment or asks a clarifying question; `conversation_repair.on_digression` handles the transition. Megalos deliberately does not ship a runtime flag that hands the skip decision to the LLM — that would violate the platform thesis (§1, "constrain, don't free-associate"). Keep the decision in the authored space: declarative skip goes through `precondition`; LLM-judged skip goes through directive authorship.
+
 ---
 
 ## 4. Worked example — build `interview-prep.yaml`
