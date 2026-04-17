@@ -1,0 +1,127 @@
+# CI for megalos. Four gates inherited from M002/S01's local-gate contract,
+# wrapped as independent jobs on ubuntu-latest × python-version matrix [3.10, 3.12].
+# See .gsd/milestones/M002/slices/S02/S02-PLAN.md for design rationale. Key points:
+#   - 8 status checks total (4 jobs × 2 py versions). Branch protection must
+#     require all 8 by name; see docs/branch-protection.md (landing in M002/S02/T05).
+#   - test = `pytest --no-cov` (focused test signal); coverage = `pytest`
+#     (picks up --cov --cov-fail-under=83 from pyproject.toml addopts).
+#     A failing assertion turns BOTH test + coverage red — honest coupling,
+#     not a bug (coverage can't measure if pytest can't pass).
+#   - fail-fast: false on every matrix — one red cell must not mask others.
+#   - Each job breaks work into discrete `- name:` steps (setup-uv, setup-python,
+#     uv sync, gate command) so GitHub Actions records per-step durations natively.
+#     M002/S02/T03 diffs those against T01's Docker pre-flight baseline (44s/43s
+#     gate-suite on arm64-native Docker) using >2×-per-step as the tripwire.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          # NOTE: uv.lock is gitignored in this project by deliberate convention —
+          # pyproject.toml version pins (M002/S01 pinned pytest, pytest-cov, ruff,
+          # mypy, types-jsonschema, types-PyYAML with upper bounds) provide
+          # reproducibility without the lockfile. Cache keyed on pyproject.toml
+          # so a dep bump invalidates the cache; a source-only change keeps it warm.
+          # If you're reading this and wondering why not uv.lock: check .gitignore
+          # and M002/S01-SUMMARY for the original decision trail.
+          cache-dependency-glob: 'pyproject.toml'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: uv sync
+        run: uv sync
+      - name: Bash tests
+        run: bash tests/run_all.sh
+      - name: pytest (no coverage)
+        run: uv run pytest --no-cov
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          # See test job above for the uv.lock-gitignored rationale.
+          cache-dependency-glob: 'pyproject.toml'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: uv sync
+        run: uv sync
+      - name: ruff check
+        run: uv run ruff check megalos_server tests
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          # See test job above for the uv.lock-gitignored rationale.
+          cache-dependency-glob: 'pyproject.toml'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: uv sync
+        run: uv sync
+      - name: mypy
+        run: uv run mypy megalos_server
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          # See test job above for the uv.lock-gitignored rationale.
+          cache-dependency-glob: 'pyproject.toml'
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: uv sync
+        run: uv sync
+      - name: pytest (full with coverage + threshold)
+        run: uv run pytest
