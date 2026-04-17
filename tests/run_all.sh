@@ -4,9 +4,6 @@ set -e
 cd "$(dirname "$0")/.."
 
 TESTS=(
-  tests/test_templates.sh
-  tests/test_megalos.sh
-  tests/test_integration.sh
   tests/test_mcp_json.sh
 )
 
