@@ -26,9 +26,13 @@ include = ["megalos_server*"]
 [tool.setuptools.package-data]
 megalos_server = ["workflows/*.yaml", "*.md"]
 
+# Coverage threshold pinned at baseline-minus-2%. Baseline measured by
+# `uv run pytest --cov --cov-report=term` during M002/S01/T04 → 85% TOTAL;
+# floor(85 - 2) = 83. Revisit when refactors change the honest baseline.
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "--cov --cov-fail-under=83"
 
 [tool.coverage.run]
 branch = true
