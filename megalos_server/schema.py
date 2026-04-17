@@ -175,6 +175,71 @@ def _validate_step_optional_fields(step: dict, label: str, errors: list[str]) ->
         errors.append(f"Step '{label}' has output_from without intermediate_artifacts")
 
 
+def _precondition_ref(step: dict) -> str | None:
+    """Extract the ref string from a step's precondition, or None if absent/malformed."""
+    pc = step.get("precondition")
+    if not isinstance(pc, dict):
+        return None
+    if "when_equals" in pc:
+        we = pc["when_equals"]
+        if isinstance(we, dict) and isinstance(we.get("ref"), str):
+            return we["ref"]
+    if "when_present" in pc:
+        wp = pc["when_present"]
+        if isinstance(wp, str):
+            return wp
+    return None
+
+
+def _validate_workflow_preconditions(steps: list, errors: list[str]) -> None:
+    """Cross-step precondition checks: (b) forward-ref, (c) first-step, (d) sub-path vs schemaless."""
+    sid_to_index: dict[str, int] = {}
+    sid_to_step: dict[str, dict] = {}
+    for i, step in enumerate(steps):
+        if isinstance(step, dict) and isinstance(step.get("id"), str):
+            sid_to_index[step["id"]] = i
+            sid_to_step[step["id"]] = step
+    for k, step in enumerate(steps):
+        if not isinstance(step, dict) or "precondition" not in step:
+            continue
+        ref = _precondition_ref(step)
+        if ref is None or not _is_valid_ref_path(ref):
+            continue
+        label = step.get("id", str(k))
+        # (c) first-step precondition — no valid prior step exists
+        if k == 0:
+            errors.append(
+                f"Step '{label}' precondition is on the first step (index 0); "
+                f"no prior step exists to reference"
+            )
+            continue
+        parts = ref.split(".")
+        if len(parts) < 2:
+            continue
+        ref_sid = parts[1]
+        if ref_sid not in sid_to_index:
+            continue
+        m = sid_to_index[ref_sid]
+        # (b) forward ref — ref points to a step at or after the current step
+        if m >= k:
+            errors.append(
+                f"Step '{label}' precondition is a forward ref: references step '{ref_sid}' "
+                f"(index {m}) which does not precede step '{label}' (index {k})"
+            )
+            continue
+        # (d) sub-path against a step lacking output_schema and collect: true
+        if len(parts) > 2:
+            ref_step = sid_to_step[ref_sid]
+            has_schema = "output_schema" in ref_step
+            is_collect = ref_step.get("collect") is True
+            if not has_schema and not is_collect:
+                errors.append(
+                    f"Step '{label}' precondition sub-path references step '{ref_sid}' "
+                    f"which lacks both 'output_schema' and 'collect: true'; "
+                    f"sub-path refs require one of these"
+                )
+
+
 def validate_workflow(path: str) -> tuple[list[str], dict | None]:
     """Validate a workflow YAML file. Returns (errors, parsed_doc). Empty errors = valid."""
     try:
@@ -235,6 +300,8 @@ def validate_workflow(path: str) -> tuple[list[str], dict | None]:
             errors.append(f"Step '{step.get('id', i)}' anti_patterns must be a list")
         label = step.get("id", str(i))
         _validate_step_optional_fields(step, label, errors)
+    # Cross-step pass: precondition forward-refs, first-step, sub-path vs schemaless
+    _validate_workflow_preconditions(doc["steps"], errors)
     # Cross-reference: inject_context 'from' must point to an existing step ID
     all_step_ids = {s.get("id") for s in doc["steps"] if isinstance(s, dict)}
     for step in doc["steps"]:
