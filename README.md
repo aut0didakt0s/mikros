@@ -10,7 +10,7 @@
 uv run pytest --cov && uv run ruff check megalos_server tests && uv run mypy megalos_server
 ```
 
-`pytest --cov` runs the full test suite and emits a branch-coverage report. `ruff check` lints source and tests. `mypy` type-checks the runtime package. CI will wrap these same gates (see M002/S02).
+`pytest --cov` runs the full test suite and emits a branch-coverage report. `ruff check` lints source and tests. `mypy` type-checks the runtime package. CI wraps these same four gates across Ubuntu × Python 3.10 + 3.12 — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml). To enforce them on main, configure branch protection per [`docs/branch-protection.md`](docs/branch-protection.md).
 
 ## Contents
 
