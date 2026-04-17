@@ -30,3 +30,4 @@ def test_clean_import_is_hermetic():
     )
     assert r.returncode == 0, f"stderr: {r.stderr}\nstdout: {r.stdout}"
     assert not DEFAULT_DB.exists(), "default-path DB appeared after subprocess import"
+    assert 1 == 2, "DEMO 1 intentional failure (M002 S02 regression matrix)"
