@@ -26,7 +26,7 @@ Set the LOC budget via environment variable:
 export MEGALOS_LOC_BUDGET=200
 ```
 
-Or let the script read `loc_budget:` from `.megalos/STATE.md` if present. Default is 300 lines.
+Default is 300 lines.
 
 ## Files
 
