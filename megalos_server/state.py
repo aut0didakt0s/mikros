@@ -17,6 +17,22 @@ COMPLETE = "__complete__"
 _log = logging.getLogger("megalos_server.state")
 
 
+class StackFull(Exception):
+    """Raised inside create_session when pushing a frame would exceed
+    max_stack_depth. Caller catches this and maps to session_stack_full.
+
+    Carries the root's current depth (pre-insert) and the cap so the error
+    body at the call site can report both without a follow-up query."""
+
+    def __init__(self, root_session_id: str, current_depth: int, max_depth: int):
+        self.root_session_id = root_session_id
+        self.current_depth = current_depth
+        self.max_depth = max_depth
+        super().__init__(
+            f"stack full for root '{root_session_id}': depth {current_depth} >= max {max_depth}"
+        )
+
+
 def _log_eviction(reason: str, ids: list[str], **extra: object) -> None:
     """Emit one INFO line per eviction event. One line per CALL, not per row."""
     _log.info(
@@ -68,6 +84,7 @@ def create_session(
     parent_session_id: str | None = None,
     frame_type: str = "call",
     call_step_id: str | None = None,
+    max_stack_depth: int | None = None,
 ) -> str:
     """Create a new session. Returns session ID.
 
@@ -86,6 +103,16 @@ def create_session(
     stores the parent's call-step ID for frame_type='call' (stamped later
     by set_called_session) and the paused_at_step for frame_type='digression'
     (stamped directly here). Future cleanup can rename the column.
+
+    max_stack_depth: when set and parent_session_id is set, reject pushes
+    that would bring the stack depth above this cap. Raise StackFull INSIDE
+    the same BEGIN IMMEDIATE transaction that would have done the insert;
+    rollback guarantees two concurrent pushes can't both observe 'depth under
+    cap' and both insert. See session_stack_full body at push_flow's
+    construction site for the depth-semantics definition: depth = number
+    of frames above root = stack_depth(root_session_id) return value.
+    Lone session = depth 0; one push = depth 1; at depth N==max_stack_depth,
+    the next push is rejected.
     """
     sid = uuid.uuid4().hex[:12]
     now = _now_iso()
@@ -135,6 +162,25 @@ def create_session(
             else:
                 root_sid = parent_row[0]
                 child_depth = parent_row[1] + 1
+            # Atomic depth-cap: compute the current stack depth INSIDE this
+            # BEGIN IMMEDIATE txn, compare to max, and insert only if under cap.
+            # BEGIN IMMEDIATE serialises writers at transaction start; any
+            # competing txn that has already committed a frame above this root
+            # will be visible to our read here. Two concurrent push_flow calls
+            # that both observed depth=N-1 pre-flight cannot both commit: the
+            # second txn waits, then re-reads a fresh COUNT and raises StackFull.
+            if max_stack_depth is not None:
+                depth_row = conn.execute(
+                    "SELECT COUNT(*) FROM session_stack WHERE root_session_id = ?",
+                    (root_sid,),
+                ).fetchone()
+                current_stack_depth = int(depth_row[0])
+                if current_stack_depth >= max_stack_depth:
+                    raise StackFull(
+                        root_session_id=root_sid,
+                        current_depth=current_stack_depth,
+                        max_depth=max_stack_depth,
+                    )
             conn.execute(
                 "INSERT INTO session_stack (session_id, root_session_id, depth, "
                 "frame_type, call_step_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -489,6 +535,37 @@ def parent_of(session_id: str) -> str | None:
         (root_sid, depth - 1),
     ).fetchone()
     return row[0] if row else None
+
+
+def depth_breakdown() -> list[dict]:
+    """Return per-root depth entries for every root session currently in state.
+
+    Shape: list of {"root_session_id": str, "depth": int}. One entry per root.
+    A 'root' is a session whose session_id does NOT appear in session_stack
+    (i.e. it has no frame of its own above some deeper root). For each such
+    root, depth = count of frames where root_session_id = root.session_id,
+    equal to stack_depth(root). Roots with no frames above report depth 0
+    (honest — they occupy a cap slot but have no stack).
+
+    Ordering: depth DESC (deepest stacks surface first as likely cap offenders),
+    ties broken by root_session_id ASC for determinism.
+
+    Single SQL round-trip — the LEFT JOIN + GROUP BY covers both framed and
+    lone-root sessions in one query.
+    """
+    conn = db._get_conn()
+    rows = conn.execute(
+        """
+        SELECT s.session_id AS root_session_id,
+               COUNT(st.session_id) AS depth
+        FROM sessions s
+        LEFT JOIN session_stack st ON st.root_session_id = s.session_id
+        WHERE s.session_id NOT IN (SELECT session_id FROM session_stack)
+        GROUP BY s.session_id
+        ORDER BY depth DESC, s.session_id ASC
+        """
+    ).fetchall()
+    return [{"root_session_id": r[0], "depth": int(r[1])} for r in rows]
 
 
 def _frame_row_to_dict(row: tuple) -> dict:

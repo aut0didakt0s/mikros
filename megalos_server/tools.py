@@ -7,10 +7,22 @@ import re
 import jsonschema
 
 from . import state
-from .errors import ARTIFACT_MAX, CONTENT_MAX, SUB_WORKFLOW_PENDING, error_response
+from .errors import (
+    ARTIFACT_MAX,
+    CONTENT_MAX,
+    SESSION_STACK_FULL,
+    SUB_WORKFLOW_PENDING,
+    error_response,
+)
 from .state import COMPLETE as _COMPLETE
 
 _DEFAULT_MAX_RETRIES = 3
+
+# max_stack_depth = 3 leave one slot headroom under the 5 active-session cap for
+# a new top-level session spawned from a separate client conversation. Deeper
+# stack also risks client-side UX edge cases: interrupt-inside-interrupt-
+# inside-interrupt is already rare; four-deep is pathological.
+max_stack_depth = 3
 
 _DO_NOT_RULES = [
     "Do NOT skip ahead to later steps.",
@@ -539,10 +551,16 @@ def register_tools(mcp, workflows):
         active = state.count_active()
         if active >= 5:
             active_sessions = [s for s in state.list_sessions() if s["status"] == "active"]
+            # depth_breakdown: per-root {root_session_id, depth}, sorted deepest first.
+            # Depth semantics: depth = frames above root = stack_depth(root_session_id)
+            # return value. Lone session → 0; one push → 1. Same field and same shape
+            # as on session_stack_full below — operators get a single diagnostic view
+            # across both cap-hit paths.
             return error_response(
                 "session_cap_exceeded",
                 f"Session cap reached ({active}/5). Delete or complete a session first.",
                 active_sessions=active_sessions,
+                depth_breakdown=state.depth_breakdown(),
             )
 
         wf = workflows[workflow_type]
@@ -1310,19 +1328,75 @@ def register_tools(mcp, workflows):
                 available_types=list(workflows.keys()),
             )
 
+        # Compute the outer session's root to cheaply surface session_stack_full
+        # in the common pre-flight case. The authoritative guard is the atomic
+        # check inside state.create_session below (BEGIN IMMEDIATE txn shared
+        # with the stack insert); this pre-flight just spares one transaction
+        # start + rollback in the steady state. Concurrent-race correctness
+        # lives in create_session, not here.
+        outer_own = state.own_frame(session_id)
+        outer_root = outer_own["root_session_id"] if outer_own else session_id
+        current_depth = state.stack_depth(outer_root)
+        # Depth semantics (pinned at error-construction site): depth = frames
+        # above root = stack_depth(root_session_id) return value. Lone session
+        # → depth 0; one push → depth 1; at depth max_stack_depth, the next
+        # push is rejected. Ordering: this check fires BEFORE session_cap_exceeded
+        # because stack cap is the more specific condition.
+        if current_depth >= max_stack_depth:
+            return error_response(
+                SESSION_STACK_FULL,
+                f"session stack full: depth {current_depth} at max {max_stack_depth} "
+                f"for root '{outer_root}'. Resolve a frame before pushing again.",
+                current_depth=current_depth,
+                max_depth=max_stack_depth,
+                root_session_id=outer_root,
+                depth_breakdown=state.depth_breakdown(),
+            )
+
+        # Global active-session cap: push_flow creates a new session just like
+        # start_workflow, so the same ceiling applies. Same depth_breakdown
+        # field shape as session_stack_full above so operators get a consistent
+        # diagnostic across both cap-hit paths.
+        active = state.count_active()
+        if active >= 5:
+            active_sessions = [s for s in state.list_sessions() if s["status"] == "active"]
+            return error_response(
+                "session_cap_exceeded",
+                f"Session cap reached ({active}/5). Delete or complete a session first.",
+                active_sessions=active_sessions,
+                depth_breakdown=state.depth_breakdown(),
+            )
+
         child_wf = workflows[workflow_type]
         first_step = child_wf["steps"][0]
         # create_session pushes a stack frame in the same transaction when
         # parent_session_id is set. Pass frame_type='digression' and stamp
         # call_step_id with paused_at_step (column is semantically overloaded:
         # call-step ID for frame_type='call', paused_at_step for 'digression').
-        child_sid = state.create_session(
-            workflow_type,
-            current_step=first_step["id"],
-            parent_session_id=session_id,
-            frame_type="digression",
-            call_step_id=paused_at_step,
-        )
+        # max_stack_depth here is the ATOMIC guard: the depth re-read and the
+        # stack insert live in the same BEGIN IMMEDIATE txn so two concurrent
+        # pushes cannot both observe 'depth under cap' and both insert. If this
+        # raises, no session row was committed — the rollback undoes both the
+        # sessions INSERT and the session_stack INSERT atomically.
+        try:
+            child_sid = state.create_session(
+                workflow_type,
+                current_step=first_step["id"],
+                parent_session_id=session_id,
+                frame_type="digression",
+                call_step_id=paused_at_step,
+                max_stack_depth=max_stack_depth,
+            )
+        except state.StackFull as e:
+            return error_response(
+                SESSION_STACK_FULL,
+                f"session stack full: depth {e.current_depth} at max {e.max_depth} "
+                f"for root '{e.root_session_id}'. Lost the race; resolve a frame and retry.",
+                current_depth=e.current_depth,
+                max_depth=e.max_depth,
+                root_session_id=e.root_session_id,
+                depth_breakdown=state.depth_breakdown(),
+            )
         state.increment_visit(child_sid, first_step["id"])
 
         frame_depth = state.stack_depth(

@@ -24,6 +24,7 @@ CALL_CYCLE_DETECTED = "call_cycle_detected"
 SUB_WORKFLOW_RUNTIME_NOT_IMPLEMENTED = "sub_workflow_runtime_not_implemented"
 SUB_WORKFLOW_PARENT_OWNED = "sub_workflow_parent_owned"
 SUB_WORKFLOW_PENDING = "sub_workflow_pending"
+SESSION_STACK_FULL = "session_stack_full"
 CALL_STEP_REQUIRES_ENTER_SUB_WORKFLOW = "call_step_requires_enter_sub_workflow"
 
 CONTENT_MAX = 262_144

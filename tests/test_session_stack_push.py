@@ -381,3 +381,240 @@ def test_call_frame_auto_resume_still_propagates_artifact_to_parent():
     assert r["next_step"]["id"] == "p3"
     parent = state.get_session(parent_sid)
     assert parent["step_data"]["p2"] == "child-artifact"
+
+
+# --- depth cap (max_stack_depth = 3) ----------------------------------------
+
+
+def _stack_to_depth(depth: int) -> tuple[str, str]:
+    """Push digressions onto a fresh outer until the root reaches the target depth.
+    Returns (root_session_id, top_framed_session_id_at_target_depth)."""
+    outer_sid = _start_outer()
+    current = outer_sid
+    outer_paused_at = "o1"
+    for _ in range(depth):
+        r = call_tool(
+            "push_flow",
+            {
+                "session_id": current,
+                "workflow_type": _DIGRESSION,
+                "paused_at_step": outer_paused_at,
+                "context": "nested",
+            },
+        )
+        assert r.get("code") is None, r
+        current = r["session_id"]
+        # Every pushed digression is itself at d1 by construction.
+        outer_paused_at = "d1"
+    return outer_sid, current
+
+
+def test_push_flow_at_max_depth_rejected_with_session_stack_full():
+    root_sid, top_sid = _stack_to_depth(3)
+    assert state.stack_depth(root_sid) == 3
+    r = call_tool(
+        "push_flow",
+        {
+            "session_id": top_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "d1",
+            "context": "one too many",
+        },
+    )
+    assert r["code"] == "session_stack_full"
+    assert r["current_depth"] == 3
+    assert r["max_depth"] == 3
+    assert r["root_session_id"] == root_sid
+    # depth_breakdown present with identical shape as session_cap_exceeded.
+    assert isinstance(r["depth_breakdown"], list)
+    assert r["depth_breakdown"] == [{"root_session_id": root_sid, "depth": 3}]
+
+
+def test_push_flow_past_max_depth_leaves_no_orphan_session_or_frame():
+    root_sid, top_sid = _stack_to_depth(3)
+    r = call_tool(
+        "push_flow",
+        {
+            "session_id": top_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "d1",
+            "context": "rejected",
+        },
+    )
+    assert r["code"] == "session_stack_full"
+    # Depth unchanged after rejection — no orphan frame in session_stack.
+    assert state.stack_depth(root_sid) == 3
+    # Total session count unchanged: 1 outer + 3 digressions = 4.
+    sessions = state.list_sessions()
+    assert len(sessions) == 4
+
+
+def test_push_flow_concurrent_race_atomicity_one_wins_one_rejected():
+    """Two concurrent push_flow calls at depth 2 must not both succeed.
+    BEGIN IMMEDIATE + in-txn stack-depth re-read is the correctness mechanism.
+    Empirically, one thread commits at depth 3 and the other re-reads the
+    fresh COUNT and raises StackFull → session_stack_full response.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    # Seed stack to depth 2 so exactly one slot remains.
+    root_sid, top_sid = _stack_to_depth(2)
+    assert state.stack_depth(root_sid) == 2
+
+    def _push():
+        return call_tool(
+            "push_flow",
+            {
+                "session_id": top_sid,
+                "workflow_type": _DIGRESSION,
+                "paused_at_step": "d1",
+                "context": "race",
+            },
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        futures = [ex.submit(_push) for _ in range(2)]
+        results = [f.result() for f in futures]
+
+    ok_count = sum(1 for r in results if r.get("status") != "error")
+    rejected = [r for r in results if r.get("code") == "session_stack_full"]
+    pending = [r for r in results if r.get("code") == "sub_workflow_pending"]
+    # Atomicity guarantee: exactly one insert lands at depth 3.
+    assert state.stack_depth(root_sid) == 3
+    # One success + one rejection. Rejection may surface as session_stack_full
+    # (losing thread raced the atomic in-txn depth re-read) or
+    # sub_workflow_pending (losing thread saw the winner's frame via
+    # top_frame_for BEFORE entering its own create_session transaction).
+    # Either code is a legitimate "no second insert" outcome — both prove the
+    # atomicity invariant (no second frame committed).
+    assert ok_count == 1, results
+    assert len(rejected) + len(pending) == 1, results
+
+
+def test_session_cap_exceeded_body_carries_depth_breakdown_across_roots(monkeypatch):
+    """Global active-session cap hit with sessions spread across roots returns
+    session_cap_exceeded whose depth_breakdown entry-per-root shape matches the
+    session_stack_full contract. Ordering: depth DESC, root_session_id ASC."""
+    # 1 outer + 3 digressions = 4 active sessions on one deep root.
+    root_deep, _top = _stack_to_depth(3)
+    # Seed one lone outer → 5 total, exactly at the >=5 cap. The NEXT
+    # start_workflow triggers session_cap_exceeded.
+    lone_sid = _start_outer()
+    r = call_tool("start_workflow", {"workflow_type": _OUTER, "context": "one too many"})
+    assert r["code"] == "session_cap_exceeded"
+    breakdown = r["depth_breakdown"]
+    # Deep root first at depth 3, then the lone outer at depth 0.
+    assert breakdown[0] == {"root_session_id": root_deep, "depth": 3}
+    # The lone outer should be the only depth-0 entry.
+    depth_zero = [e for e in breakdown if e["depth"] == 0]
+    assert len(depth_zero) == 1
+    assert depth_zero[0]["root_session_id"] == lone_sid
+    # Shape parity with session_stack_full: list of {root_session_id, depth}.
+    for entry in breakdown:
+        assert set(entry) == {"root_session_id", "depth"}
+
+
+def test_depth_breakdown_sorted_deepest_first_ties_by_root_id():
+    """Breakdown determinism probe: multiple roots at different depths sort
+    depth DESC then root_session_id ASC. Ties at depth 0 break by SID ASC."""
+    # Build: one root at depth 2 (3 sessions), two lone roots at depth 0 = 5 sessions.
+    # That saturates the cap, so the next start_workflow triggers the breakdown.
+    root_mid, _ = _stack_to_depth(2)
+    _start_outer()
+    _start_outer()
+    r = call_tool("start_workflow", {"workflow_type": _OUTER, "context": "over"})
+    assert r["code"] == "session_cap_exceeded"
+    breakdown = r["depth_breakdown"]
+    assert breakdown[0] == {"root_session_id": root_mid, "depth": 2}
+    # Remaining entries are depth 0, sorted by session_id ASC.
+    tail = breakdown[1:]
+    assert all(e["depth"] == 0 for e in tail)
+    tail_ids = [e["root_session_id"] for e in tail]
+    assert tail_ids == sorted(tail_ids)
+
+
+def test_m004_call_child_contributes_to_stack_depth_cap():
+    """Call-frames count into stack depth identically to digression-frames.
+    Starting with a call-child at depth 1 leaves room for exactly two more
+    digressions before the cap trips on the fourth push attempt.
+    """
+    start = call_tool("start_workflow", {"workflow_type": _CALL_PARENT, "context": ""})
+    parent_sid = start["session_id"]
+    call_tool("submit_step", {"session_id": parent_sid, "step_id": "p1", "content": "p1"})
+    spawn = call_tool(
+        "enter_sub_workflow", {"parent_session_id": parent_sid, "call_step_id": "p2"}
+    )
+    call_child_sid = spawn["session_id"]
+    assert state.stack_depth(parent_sid) == 1  # call-frame contributes to depth
+
+    # Push digression onto the call-child (which is at top of its chain).
+    r2 = call_tool(
+        "push_flow",
+        {
+            "session_id": call_child_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "c1",
+            "context": "d-at-2",
+        },
+    )
+    assert r2.get("code") is None, r2
+    d1_sid = r2["session_id"]
+    assert state.stack_depth(parent_sid) == 2
+
+    r3 = call_tool(
+        "push_flow",
+        {
+            "session_id": d1_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "d1",
+            "context": "d-at-3",
+        },
+    )
+    assert r3.get("code") is None, r3
+    d2_sid = r3["session_id"]
+    assert state.stack_depth(parent_sid) == 3
+
+    # Fourth push — call-child counted, so cap has no room left.
+    r4 = call_tool(
+        "push_flow",
+        {
+            "session_id": d2_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "d1",
+            "context": "too-deep",
+        },
+    )
+    assert r4["code"] == "session_stack_full"
+    assert r4["current_depth"] == 3
+    assert r4["max_depth"] == 3
+    assert r4["root_session_id"] == parent_sid
+
+
+def test_session_stack_full_and_session_cap_exceeded_share_depth_breakdown_shape():
+    """Field-name + shape parity probe: both error bodies carry depth_breakdown
+    with the same list-of-{root_session_id,depth} contract."""
+    # Build session_stack_full body.
+    root_sid, top_sid = _stack_to_depth(3)
+    sf = call_tool(
+        "push_flow",
+        {
+            "session_id": top_sid,
+            "workflow_type": _DIGRESSION,
+            "paused_at_step": "d1",
+            "context": "over",
+        },
+    )
+    assert sf["code"] == "session_stack_full"
+
+    # Build session_cap_exceeded body. 4 sessions created so far; add 1 more for 5.
+    _lone = _start_outer()
+    cap = call_tool("start_workflow", {"workflow_type": _OUTER, "context": "over"})
+    assert cap["code"] == "session_cap_exceeded"
+
+    # Identical field name + identical entry shape on both bodies.
+    assert "depth_breakdown" in sf
+    assert "depth_breakdown" in cap
+    for entry in sf["depth_breakdown"] + cap["depth_breakdown"]:
+        assert set(entry.keys()) == {"root_session_id", "depth"}
+        assert isinstance(entry["root_session_id"], str)
+        assert isinstance(entry["depth"], int)
