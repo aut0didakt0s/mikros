@@ -1,11 +1,11 @@
-# m004_s03_call_context_from_child.yaml — M004/S03/T01 pair 2 (child)
+# call_context_from_child.yaml
 #
 # First step exists only to receive the parent-extracted context via the
 # enter_sub_workflow response `context` field (no templating layer — runtime
 # surfaces the seeded string directly).
 
 schema_version: "0.3"
-name: m004_s03_call_context_from_child
+name: call_context_from_child
 description: Child that runs against the parent-seeded topic context.
 category: analysis_decision
 output_format: text

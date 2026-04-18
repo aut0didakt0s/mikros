@@ -1,4 +1,4 @@
-# m004_s03_artifact_inlining_parent.yaml — M004/S03/T01 pair 1 (parent)
+# artifact_inlining_parent.yaml
 #
 # Contract path: child markdown artifact inlines into parent via generate_artifact
 # with heading hierarchy preserved (no flattening).
@@ -10,7 +10,7 @@
 # survive the join intact.
 
 schema_version: "0.3"
-name: m004_s03_artifact_inlining_parent
+name: artifact_inlining_parent
 description: Parent inlining child markdown artifact into its own output.
 category: analysis_decision
 output_format: text
@@ -31,4 +31,4 @@ steps:
       - research delegated
     anti_patterns:
       - Skipping the handoff
-    call: m004_s03_artifact_inlining_child
+    call: artifact_inlining_child

@@ -292,7 +292,7 @@ The contract is four fields on the parent's call-step, and nothing else:
 
 ### 4c. A worked snippet
 
-Minimal shape reference, drawn from `tests/fixtures/workflows/m004_s03_output_schema_pass_parent.yaml`:
+Minimal shape reference, drawn from `tests/fixtures/workflows/output_schema_pass_parent.yaml`:
 
 ```yaml
 steps:
@@ -301,7 +301,7 @@ steps:
     directive_template: Hand off and expect a verdict back.
     gates: [handoff performed]
     anti_patterns: [Accepting invalid verdict]
-    call: m004_s03_output_schema_pass_child
+    call: output_schema_pass_child
     call_context_from: step_data.p1.topic
     output_schema:
       type: object
@@ -324,7 +324,7 @@ Revising a call-step is the parent-owned lever for re-running a child from scrat
 
 Any child-side failure — a cascade error, a guardrail escalation, a final-step `output_schema` mismatch — is wrapped into the **parent's** escalation response under a `called_workflow_error` envelope. The envelope carries three fields: `child_session_id` (for forensic `get_state` lookups), `child_workflow_type` (which workflow was running), and `child_error` (the underlying error payload). The parent handles the escalation the same way it handles any other escalation; the retained child is available for inspection, not continued interaction.
 
-**Cascade-trigger lineage.** The canonical shape for producing a cascade inside a child (skip-loop that exhausts its predecessors) already lives on disk at `tests/fixtures/workflows/m003_s02_cascade_error.yaml` and was lifted verbatim into `tests/fixtures/workflows/m004_s03_cascade_wrap_child.yaml`. If you need a child that cascades on purpose (for tests, or to rehearse a failure path), start from that shape rather than inventing a new one.
+**Cascade-trigger lineage.** The canonical shape for producing a cascade inside a child (skip-loop that exhausts its predecessors) already lives on disk at `tests/fixtures/workflows/cascade_error.yaml` and was lifted verbatim into `tests/fixtures/workflows/cascade_wrap_child.yaml`. If you need a child that cascades on purpose (for tests, or to rehearse a failure path), start from that shape rather than inventing a new one.
 
 ### 4f. Session-cap cost
 

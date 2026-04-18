@@ -1,4 +1,4 @@
-# m004_s03_output_schema_fail_parent.yaml — M004/S03/T01 pair 4 (parent)
+# output_schema_fail_parent.yaml
 #
 # Contract path: parent call-step carries an output_schema requiring a field
 # the child does NOT produce. Child completes normally; on propagation, parent
@@ -7,7 +7,7 @@
 # child_error.reason == "parent_output_schema_fail".
 
 schema_version: "0.3"
-name: m004_s03_output_schema_fail_parent
+name: output_schema_fail_parent
 description: Parent whose output_schema rejects the child's final artifact.
 category: analysis_decision
 output_format: text
@@ -28,7 +28,7 @@ steps:
       - handoff performed
     anti_patterns:
       - Accepting missing approval
-    call: m004_s03_output_schema_fail_child
+    call: output_schema_fail_child
     output_schema:
       type: object
       required: [approval]

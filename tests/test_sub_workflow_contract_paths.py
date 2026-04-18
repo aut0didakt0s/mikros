@@ -1,4 +1,4 @@
-"""Tests for M004/S03: sub-workflow contract paths 1-7.
+"""Tests for sub-workflow contract paths 1-7.
 
 Each test drives one parent+child YAML pair end-to-end through the live MCP
 tool surface (start_workflow → submit_step → enter_sub_workflow → submit_step
@@ -54,10 +54,10 @@ def _drive(session_id: str, submissions: list[tuple[str, str]]) -> dict:
 # --- Pair 1: artifact inlining ----------------------------------------------
 
 
-def test_m004_s03_artifact_inlining_preserves_markdown_hierarchy():
+def test_artifact_inlining_preserves_markdown_hierarchy():
     parent_key, child_key = _load_pair(
-        "m004_s03_artifact_inlining_parent",
-        "m004_s03_artifact_inlining_child",
+        "artifact_inlining_parent",
+        "artifact_inlining_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -89,10 +89,10 @@ def test_m004_s03_artifact_inlining_preserves_markdown_hierarchy():
 # --- Pair 2: call_context_from ----------------------------------------------
 
 
-def test_m004_s03_call_context_from_seeds_child_context():
+def test_call_context_from_seeds_child_context():
     parent_key, child_key = _load_pair(
-        "m004_s03_call_context_from_parent",
-        "m004_s03_call_context_from_child",
+        "call_context_from_parent",
+        "call_context_from_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -116,10 +116,10 @@ def test_m004_s03_call_context_from_seeds_child_context():
 # --- Pair 3: output_schema pass ---------------------------------------------
 
 
-def test_m004_s03_output_schema_pass_advances_parent():
+def test_output_schema_pass_advances_parent():
     parent_key, child_key = _load_pair(
-        "m004_s03_output_schema_pass_parent",
-        "m004_s03_output_schema_pass_child",
+        "output_schema_pass_parent",
+        "output_schema_pass_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -151,10 +151,10 @@ def test_m004_s03_output_schema_pass_advances_parent():
 # --- Pair 4: output_schema fail ---------------------------------------------
 
 
-def test_m004_s03_output_schema_fail_escalates_and_retains_child():
+def test_output_schema_fail_escalates_and_retains_child():
     parent_key, child_key = _load_pair(
-        "m004_s03_output_schema_fail_parent",
-        "m004_s03_output_schema_fail_child",
+        "output_schema_fail_parent",
+        "output_schema_fail_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -193,10 +193,10 @@ def test_m004_s03_output_schema_fail_escalates_and_retains_child():
 # --- Pair 5: revise-the-call clean rerun ------------------------------------
 
 
-def test_m004_s03_revise_call_step_unlinks_child_and_respawns_fresh():
+def test_revise_call_step_unlinks_child_and_respawns_fresh():
     parent_key, child_key = _load_pair(
-        "m004_s03_revise_clean_rerun_parent",
-        "m004_s03_revise_clean_rerun_child",
+        "revise_clean_rerun_parent",
+        "revise_clean_rerun_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -252,10 +252,10 @@ def test_m004_s03_revise_call_step_unlinks_child_and_respawns_fresh():
 # --- Pair 6: cascade wrap ---------------------------------------------------
 
 
-def test_m004_s03_child_cascade_wraps_parent_and_retains_child():
+def test_child_cascade_wraps_parent_and_retains_child():
     parent_key, child_key = _load_pair(
-        "m004_s03_cascade_wrap_parent",
-        "m004_s03_cascade_wrap_child",
+        "cascade_wrap_parent",
+        "cascade_wrap_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})
@@ -306,10 +306,10 @@ def test_m004_s03_child_cascade_wraps_parent_and_retains_child():
 # --- Pair 7: branches + precondition compose --------------------------------
 
 
-def test_m004_s03_branches_precondition_compose_spawns_child_on_happy_path():
+def test_branches_precondition_compose_spawns_child_on_happy_path():
     parent_key, child_key = _load_pair(
-        "m004_s03_branches_precondition_compose_parent",
-        "m004_s03_branches_precondition_compose_child",
+        "branches_precondition_compose_parent",
+        "branches_precondition_compose_child",
     )
     try:
         r = call_tool("start_workflow", {"workflow_type": parent_key, "context": ""})

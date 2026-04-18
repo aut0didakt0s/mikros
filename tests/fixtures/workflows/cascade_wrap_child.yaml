@@ -1,4 +1,4 @@
-# m004_s03_cascade_wrap_child.yaml — M004/S03/T02 pair 6 (child)
+# cascade_wrap_child.yaml
 #
 # Reuses the canonical M003/S02 cascade-trigger shape:
 #   step_1 emits {flag}; step_2 is skipped when flag != run; step_3 references
@@ -7,7 +7,7 @@
 # S02 runtime wraps the child error into parent-side called_workflow_error.
 
 schema_version: "0.3"
-name: m004_s03_cascade_wrap_child
+name: cascade_wrap_child
 description: Child that triggers a precondition cascade on a skipped predecessor.
 category: analysis_decision
 output_format: text

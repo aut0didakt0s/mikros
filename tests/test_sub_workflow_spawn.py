@@ -1,4 +1,4 @@
-"""Tests for M004/S02/T01: child session spawn via enter_sub_workflow.
+"""Tests for child session spawn via enter_sub_workflow.
 
 Covers:
 - child session creation with bidirectional link

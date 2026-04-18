@@ -1,4 +1,4 @@
-"""Tests for M004/S02/T04: observability surfaces + call-step concurrency guards.
+"""Tests for observability surfaces + call-step concurrency guards.
 
 Covers:
 - get_state.called_session conditional field (present when child in flight; omitted otherwise).

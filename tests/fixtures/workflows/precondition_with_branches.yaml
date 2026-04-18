@@ -1,4 +1,4 @@
-# m003_s02_precondition_with_branches.yaml — M003/S02/T02 fixture (d)
+# precondition_with_branches.yaml
 #
 # Four-step workflow proving precondition + branches coexistence:
 # step_2 has BOTH `precondition` and `branches`. When go=yes → step_2 runs,
@@ -6,7 +6,7 @@
 # entirely, linear fallback lands on step_3a, branches never consulted.
 
 schema_version: "0.3"
-name: m003_s02_precondition_with_branches
+name: precondition_with_branches
 description: Precondition + branches coexistence fixture.
 category: analysis_decision
 output_format: text

@@ -1,11 +1,11 @@
-# m004_s03_branches_precondition_compose_child.yaml — M004/S03/T02 pair 7 (child)
+# branches_precondition_compose_child.yaml
 #
 # Minimal one-step child used purely to prove the parent's call-step composes
 # with upstream branches and an on-call precondition. Final step content
 # propagates into parent.step_data[p_call].
 
 schema_version: "0.3"
-name: m004_s03_branches_precondition_compose_child
+name: branches_precondition_compose_child
 description: Minimal one-step child for branches+precondition+call composition.
 category: analysis_decision
 output_format: text

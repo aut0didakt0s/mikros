@@ -1,4 +1,4 @@
-"""Tests for M004/S02/T03: child failure → parent escalation wrapping + parent-owned guards.
+"""Tests for child failure → parent escalation wrapping + parent-owned guards.
 
 Covers:
 - `called_workflow_error` wrapper shape on parent-escalation responses

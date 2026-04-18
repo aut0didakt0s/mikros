@@ -1,4 +1,4 @@
-# m003_s02_revise_unskip.yaml — M003/S02/T02 fixture (b)
+# revise_unskip.yaml
 #
 # Shape identical to fixture (a) — three steps, precondition on step_2 gated on
 # step_1.mode == run_me. The test exercises a revise-then-resubmit sequence:
@@ -6,7 +6,7 @@
 # mode=run_me, resubmit → step_2 runs.
 
 schema_version: "0.3"
-name: m003_s02_revise_unskip
+name: revise_unskip
 description: Precondition revise-unskip fixture — revise step_1 to unskip step_2.
 category: analysis_decision
 output_format: text

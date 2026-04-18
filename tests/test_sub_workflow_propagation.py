@@ -1,4 +1,4 @@
-"""Tests for M004/S02/T02: child→parent propagation bridge.
+"""Tests for child→parent propagation bridge.
 
 Covers:
 - successful artifact propagation + parent.step_data write

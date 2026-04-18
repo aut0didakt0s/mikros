@@ -1,4 +1,4 @@
-# m004_s03_call_context_from_parent.yaml — M004/S03/T01 pair 2 (parent)
+# call_context_from_parent.yaml
 #
 # Contract path: parent step_1 collects {topic, audience} JSON; the call-step
 # declares `call_context_from: step_data.s1.topic` so the child session's
@@ -6,7 +6,7 @@
 # extraction + injection on spawn works.
 
 schema_version: "0.3"
-name: m004_s03_call_context_from_parent
+name: call_context_from_parent
 description: Parent seeding child context via call_context_from subtree extraction.
 category: analysis_decision
 output_format: text
@@ -39,5 +39,5 @@ steps:
       - handoff performed
     anti_patterns:
       - Leaking audience to child
-    call: m004_s03_call_context_from_child
+    call: call_context_from_child
     call_context_from: step_data.s1.topic

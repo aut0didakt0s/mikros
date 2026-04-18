@@ -1,4 +1,4 @@
-# m004_s03_cascade_wrap_parent.yaml — M004/S03/T02 pair 6 (parent)
+# cascade_wrap_parent.yaml
 #
 # Contract path: child runs to a precondition cascade (skipped_predecessor_reference).
 # On propagation, parent escalates in the same response and carries the canonical
@@ -6,7 +6,7 @@
 # still resolvable via get_state (not auto-deleted).
 
 schema_version: "0.3"
-name: m004_s03_cascade_wrap_parent
+name: cascade_wrap_parent
 description: Parent whose child triggers a precondition cascade.
 category: analysis_decision
 output_format: text
@@ -27,7 +27,7 @@ steps:
       - handoff performed
     anti_patterns:
       - Skipping the handoff
-    call: m004_s03_cascade_wrap_child
+    call: cascade_wrap_child
 
   - id: p3
     title: Wrap up

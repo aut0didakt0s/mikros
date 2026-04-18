@@ -1,4 +1,4 @@
-# m003_s02_cascade_error.yaml — M003/S02/T02 fixture (c)
+# cascade_error.yaml
 #
 # Four-step workflow proving cascade-error surfacing:
 # step_1 emits `flag`; step_2 skips when flag=skip; step_3 refers to
@@ -7,7 +7,7 @@
 # `skipped_predecessor_reference` error.
 
 schema_version: "0.3"
-name: m003_s02_cascade_error
+name: cascade_error
 description: Precondition cascade-error fixture — step_3 refs skipped step_2.
 category: analysis_decision
 output_format: text

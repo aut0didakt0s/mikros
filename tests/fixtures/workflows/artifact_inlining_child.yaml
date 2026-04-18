@@ -1,11 +1,11 @@
-# m004_s03_artifact_inlining_child.yaml — M004/S03/T01 pair 1 (child)
+# artifact_inlining_child.yaml
 #
 # Produces a markdown artifact on its final step. The last step's content is
 # what gets propagated into parent.step_data[call_step_id], so subsection
 # headings in the child's final content must survive parent artifact inlining.
 
 schema_version: "0.3"
-name: m004_s03_artifact_inlining_child
+name: artifact_inlining_child
 description: Research-brief child emitting a markdown artifact with subsections.
 category: analysis_decision
 output_format: text

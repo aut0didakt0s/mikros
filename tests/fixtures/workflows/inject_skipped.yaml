@@ -1,4 +1,4 @@
-# m003_s02_inject_skipped.yaml — M003/S02/T02 fixture (e)
+# inject_skipped.yaml
 #
 # Four-step workflow proving inject_context handles skipped predecessors:
 # step_1 emits `mode`; step_2 skipped when mode=skip; step_3 has
@@ -6,7 +6,7 @@
 # for the absent skipped predecessor.
 
 schema_version: "0.3"
-name: m003_s02_inject_skipped
+name: inject_skipped
 description: Inject-context from a skipped predecessor fixture.
 category: analysis_decision
 output_format: text

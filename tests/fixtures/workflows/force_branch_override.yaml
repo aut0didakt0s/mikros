@@ -1,4 +1,4 @@
-# m003_s02_force_branch_override.yaml — M003/S02/T02 fixture (f)
+# force_branch_override.yaml
 #
 # Three-step workflow proving force_branch overrides a false precondition:
 # step_3 has a precondition that is always false (mode=impossible_value).
@@ -6,7 +6,7 @@
 # Force wins: step_3 runs despite the false precondition.
 
 schema_version: "0.3"
-name: m003_s02_force_branch_override
+name: force_branch_override
 description: Force-branch guardrail overrides false precondition (anti-pattern demo).
 category: analysis_decision
 output_format: text

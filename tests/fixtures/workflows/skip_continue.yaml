@@ -1,11 +1,11 @@
-# m003_s02_skip_continue.yaml — M003/S02/T02 fixture (a)
+# skip_continue.yaml
 #
 # Three-step workflow proving the skip-continue path:
 # step_1 emits `mode`; step_2 has `precondition: when_equals step_1.mode == skip_me`
 # so mode=skip_me → step_2 skipped → session advances to step_3.
 
 schema_version: "0.3"
-name: m003_s02_skip_continue
+name: skip_continue
 description: Precondition skip-continue fixture — mode=skip_me skips step_2.
 category: analysis_decision
 output_format: text

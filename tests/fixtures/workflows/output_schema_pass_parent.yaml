@@ -1,4 +1,4 @@
-# m004_s03_output_schema_pass_parent.yaml — M004/S03/T01 pair 3 (parent)
+# output_schema_pass_parent.yaml
 #
 # Contract path: parent call-step carries an output_schema matching the child's
 # final artifact shape. On propagation the schema validates cleanly, parent
@@ -6,7 +6,7 @@
 # child's final JSON payload.
 
 schema_version: "0.3"
-name: m004_s03_output_schema_pass_parent
+name: output_schema_pass_parent
 description: Parent with passing output_schema on its call-step.
 category: analysis_decision
 output_format: text
@@ -27,7 +27,7 @@ steps:
       - handoff performed
     anti_patterns:
       - Accepting invalid verdict
-    call: m004_s03_output_schema_pass_child
+    call: output_schema_pass_child
     output_schema:
       type: object
       required: [verdict]

@@ -1,4 +1,4 @@
-# m004_s03_branches_precondition_compose_parent.yaml — M004/S03/T02 pair 7 (parent)
+# branches_precondition_compose_parent.yaml
 #
 # Contract path: `call` composes cleanly with `branches` upstream AND
 # `precondition` on the call-step itself.
@@ -7,7 +7,7 @@
 #   on step_1.go == yes. Happy path = branch A + go=yes → child spawns.
 
 schema_version: "0.3"
-name: m004_s03_branches_precondition_compose_parent
+name: branches_precondition_compose_parent
 description: Parent composing call + branches + precondition on a single flow.
 category: analysis_decision
 output_format: text
@@ -54,7 +54,7 @@ steps:
       - handoff performed
     anti_patterns:
       - Skipping the handoff
-    call: m004_s03_branches_precondition_compose_child
+    call: branches_precondition_compose_child
     precondition:
       when_equals:
         ref: step_data.step_1.go
