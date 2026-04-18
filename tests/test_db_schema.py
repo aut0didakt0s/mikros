@@ -16,6 +16,8 @@ EXPECTED_COLUMNS = {
     "created_at": "TEXT",
     "updated_at": "TEXT",
     "completed_at": "TEXT",
+    "called_session": "TEXT",
+    "parent_session_id": "TEXT",
 }
 
 

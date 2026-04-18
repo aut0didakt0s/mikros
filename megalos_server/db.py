@@ -22,7 +22,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     artifact_checkpoints TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    -- called_session NULL = no child in flight (parent's common case).
+    -- parent_session_id NULL = this is a root session (the overwhelming common case).
+    -- Both are load-bearing defaults — do NOT add NOT NULL constraints here.
+    called_session TEXT,
+    parent_session_id TEXT
 )
 """
 
@@ -46,6 +51,12 @@ def _get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute(_SCHEMA)
+    # Column-order-coupled with _SELECT_COLS + _row_to_session in state.py.
+    # New columns MUST append at the end; reordering silently corrupts row reads.
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    for col_name, col_type in (("called_session", "TEXT"), ("parent_session_id", "TEXT")):
+        if col_name not in existing_cols:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col_name} {col_type}")
     _tls.conn = conn
     return conn
 

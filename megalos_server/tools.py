@@ -780,18 +780,102 @@ def register_tools(mcp, workflows):
     @mcp.tool()
     @_trap_errors("parent_session_id")
     def enter_sub_workflow(parent_session_id: str, call_step_id: str) -> dict:
-        """Invoke a child workflow from a parent step that declares `call:`.
+        """Invoke a child workflow from a parent step that declares `call:`."""
+        err = _check_str(parent_session_id, "parent_session_id", required=True) or \
+              _check_str(call_step_id, "call_step_id", required=True)
+        if err:
+            return err
 
-        Placeholder in M004/S01: returns `sub_workflow_runtime_not_implemented`
-        for any input. Runtime semantics (child session creation, propagation,
-        escalation wrap, auto-terminate-on-success) arrive in M004/S02.
-        """
-        return error_response(
-            "sub_workflow_runtime_not_implemented",
-            "runtime not implemented; arrives in M004/S02",
-            parent_session_id=parent_session_id,
-            call_step_id=call_step_id,
+        resolved, err = _resolve_session(parent_session_id, workflows)
+        if err:
+            return err
+        parent_session, parent_wf = resolved
+
+        if parent_session["current_step"] == _COMPLETE:
+            return error_response(
+                "workflow_complete",
+                "Parent workflow already complete.",
+                session_id=parent_session_id,
+            )
+        if parent_session.get("escalation"):
+            return error_response(
+                "session_escalated",
+                "Parent session is escalated. Resolve the escalation before continuing.",
+                session_id=parent_session_id,
+                escalation=parent_session["escalation"],
+            )
+
+        if parent_session["current_step"] != call_step_id:
+            return error_response(
+                "out_of_order_submission",
+                f"parent current_step is '{parent_session['current_step']}', not '{call_step_id}'",
+                session_id=parent_session_id,
+                expected_step=parent_session["current_step"],
+                submitted_step=call_step_id,
+            )
+
+        _, call_step = _find_step(parent_wf, call_step_id)
+        if call_step is None or "call" not in call_step:
+            return error_response(
+                "invalid_argument",
+                f"parent step '{call_step_id}' has no `call` field",
+                field="call_step_id",
+                session_id=parent_session_id,
+            )
+
+        if parent_session.get("called_session"):
+            return error_response(
+                "sub_workflow_pending",
+                "a child session is already in flight for this call-step",
+                child_session_id=parent_session["called_session"],
+                parent_session_id=parent_session_id,
+                call_step_id=call_step_id,
+            )
+
+        target = call_step["call"]
+        if target not in workflows:
+            return error_response(
+                "workflow_not_loaded",
+                f"target workflow '{target}' not loaded",
+                available_types=list(workflows.keys()),
+            )
+
+        child_context = ""
+        ccf = call_step.get("call_context_from")
+        if ccf:
+            extracted = _resolve_ref(ccf, parent_session["step_data"], set(), call_step_id)
+            if extracted is _REF_ABSENT or extracted is None:
+                return error_response(
+                    "invalid_argument",
+                    f"call_context_from '{ccf}' did not resolve in parent step_data",
+                    field="call_context_from",
+                    session_id=parent_session_id,
+                )
+            child_context = extracted if isinstance(extracted, str) else json.dumps(extracted)
+
+        child_wf = workflows[target]
+        first_step = child_wf["steps"][0]
+        child_sid = state.create_session(
+            target, current_step=first_step["id"], parent_session_id=parent_session_id
         )
+        state.increment_visit(child_sid, first_step["id"])
+
+        state.set_called_session(parent_session_id, child_sid)
+
+        result = {
+            "session_id": child_sid,
+            "workflow_type": target,
+            "current_step": {"id": first_step["id"], "title": first_step["title"]},
+            "directive": first_step["directive_template"],
+            "do_not": _DO_NOT_RULES,
+            "conversation_repair": _repair_for(child_wf),
+            "gates": first_step["gates"],
+            "context": child_context,
+            "parent_session_id": parent_session_id,
+        }
+        if first_step.get("directives"):
+            result["directives"] = first_step["directives"]
+        return result
 
     @mcp.tool()
     @_trap_errors()

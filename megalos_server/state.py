@@ -49,21 +49,30 @@ def _row_to_session(row: tuple) -> dict:
         "artifact_checkpoints": json.loads(row[7]),
         "created_at": row[8],
         "updated_at": row[9],
+        "called_session": row[10],
+        "parent_session_id": row[11],
     }
 
 
+# Column order is coupled to the CREATE TABLE DDL in db.py — new columns append at the end, never reorder.
 _SELECT_COLS = (
     "session_id, workflow_type, current_step, step_data, retry_counts, "
-    "step_visit_counts, escalation, artifact_checkpoints, created_at, updated_at"
+    "step_visit_counts, escalation, artifact_checkpoints, created_at, updated_at, "
+    "called_session, parent_session_id"
 )
 
 
-def create_session(workflow_type: str, current_step: str = "") -> str:
+def create_session(
+    workflow_type: str, current_step: str = "", parent_session_id: str | None = None
+) -> str:
     """Create a new session. Returns session ID.
 
     If total session count would exceed MEGALOS_SESSION_CAP, evict oldest
     completed sessions first (by completed_at ASC), falling through to oldest
     active sessions (by updated_at ASC). Cap enforcement + INSERT are atomic.
+
+    parent_session_id: when set, marks this session as a child of the given
+    parent. Stored in parent_session_id column; never mutated after create.
     """
     sid = uuid.uuid4().hex[:12]
     now = _now_iso()
@@ -90,9 +99,10 @@ def create_session(workflow_type: str, current_step: str = "") -> str:
         conn.execute(
             "INSERT INTO sessions (session_id, workflow_type, current_step, "
             "step_data, retry_counts, step_visit_counts, escalation, "
-            "artifact_checkpoints, created_at, updated_at, completed_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL)",
-            (sid, workflow_type, current_step, empty, empty, empty, empty, now, now),
+            "artifact_checkpoints, created_at, updated_at, completed_at, "
+            "called_session, parent_session_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?)",
+            (sid, workflow_type, current_step, empty, empty, empty, empty, now, now, parent_session_id),
         )
     # Log AFTER commit — if INSERT rolled back, DELETE rolled back too; don't lie.
     if evicted_ids:
@@ -234,6 +244,18 @@ def set_escalation(session_id: str, guardrail_id: str, message: str) -> None:
         )
         if cur.rowcount == 0:
             raise KeyError(f"Session not found: {session_id}")
+
+
+def set_called_session(parent_session_id: str, child_session_id: str | None) -> None:
+    """Set or clear the parent's called_session link. Pass None to clear.
+    Raises KeyError if parent not found."""
+    with db.transaction() as conn:
+        cur = conn.execute(
+            "UPDATE sessions SET called_session = ?, updated_at = ? WHERE session_id = ?",
+            (child_session_id, _now_iso(), parent_session_id),
+        )
+        if cur.rowcount == 0:
+            raise KeyError(f"Session not found: {parent_session_id}")
 
 
 def count_active() -> int:
