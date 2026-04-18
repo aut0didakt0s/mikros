@@ -1,6 +1,6 @@
-# CI for megalos. Four gates inherited from M002/S01's local-gate contract,
+# CI for megalos. Four gates inherited from local-gate contract,
 # wrapped as independent jobs on ubuntu-latest × python-version matrix [3.10, 3.12].
-# See .gsd/milestones/M002/slices/S02/S02-PLAN.md for design rationale. Key points:
+# Key points:
 #   - 8 status checks total (4 jobs × 2 py versions). Branch protection must
 #     require all 8 by name; see docs/branch-protection.md (landing in M002/S02/T05).
 #   - test = `pytest --no-cov` (focused test signal); coverage = `pytest`

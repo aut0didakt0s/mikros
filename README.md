@@ -68,7 +68,7 @@ Domain repos and downstream consumers depend on the runtime via a pinned git URL
 ```toml
 [project]
 dependencies = [
-    "megalos-server @ git+https://github.com/agora-creations/megalos.git@v0.2.0",
+    "megalos-server @ git+https://github.com/agora-creations/megalos.git@v0.3.0",
 ]
 ```
 
