@@ -11,7 +11,7 @@
 - [The YAML schema](#the-yaml-schema)
 - [The MCP server runtime](#the-mcp-server-runtime)
   - [Public API](#public-api)
-  - [MCP tools (10)](#mcp-tools-10)
+  - [MCP tools](#mcp-tools)
   - [Mechanical enforcement](#mechanical-enforcement)
   - [Session state](#session-state)
 - [MCP servers](#mcp-servers)
