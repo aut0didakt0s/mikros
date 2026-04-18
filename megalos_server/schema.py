@@ -121,6 +121,37 @@ def _validate_step_optional_fields(step: dict, label: str, errors: list[str]) ->
                     errors.append(f"Step '{label}' precondition.when_present must be a string")
                 elif not _is_valid_ref_path(wp):
                     errors.append(f"Step '{label}' precondition.when_present.ref is not a valid ref-path: {wp}")
+    if "call" in step:
+        call_val = step["call"]
+        if not isinstance(call_val, str) or not call_val:
+            errors.append(f"Step '{label}' call must be a non-empty string")
+        # call + output_schema is allowed: validates child workflow's return value (M004 D14)
+        if step.get("collect") is True:
+            errors.append(
+                f"Step '{label}' has both 'call' and 'collect: true'; "
+                f"sub-workflow steps cannot also collect (code: call_with_collect)"
+            )
+        if "intermediate_artifacts" in step:
+            errors.append(
+                f"Step '{label}' has both 'call' and 'intermediate_artifacts'; "
+                f"sub-workflow steps cannot also produce intermediate artifacts "
+                f"(code: call_with_intermediate_artifacts)"
+            )
+    if "call_context_from" in step:
+        ccf = step["call_context_from"]
+        if not isinstance(ccf, str):
+            errors.append(f"Step '{label}' call_context_from must be a string")
+        else:
+            if "call" not in step:
+                errors.append(
+                    f"Step '{label}' has 'call_context_from' without 'call' "
+                    f"(code: call_context_from_without_call)"
+                )
+            if not _is_valid_ref_path(ccf):
+                errors.append(
+                    f"Step '{label}' call_context_from is not a valid ref-path: {ccf} "
+                    f"(code: call_invalid_context_ref)"
+                )
     if "directives" in step:
         d = step["directives"]
         if not isinstance(d, dict):
@@ -261,12 +292,12 @@ def validate_workflow(path: str) -> tuple[list[str], dict | None]:
     errors = []
     if not isinstance(doc, dict):
         return [f"Workflow YAML must be a mapping, got {type(doc).__name__}"], None
-    # schema_version is optional; default to "0.3" when omitted. No value rejection — YAGNI.
+    # schema_version is optional; default to "0.4" when omitted. No value rejection — YAGNI.
     if "schema_version" in doc:
         if not isinstance(doc["schema_version"], str):
             errors.append("schema_version must be a string")
     else:
-        doc["schema_version"] = "0.3"
+        doc["schema_version"] = "0.4"
     if "conversation_repair" in doc:
         repair = doc["conversation_repair"]
         if not isinstance(repair, dict):

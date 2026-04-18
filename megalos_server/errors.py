@@ -14,6 +14,10 @@ SESSION_ESCALATED = "session_escalated"
 WORKFLOW_COMPLETE = "workflow_complete"
 CONCURRENT_WRITE_CONFLICT = "concurrent_write_conflict"  # reserved for S02
 SKIPPED_PREDECESSOR_REFERENCE = "skipped_predecessor_reference"
+CALL_WITH_COLLECT = "call_with_collect"
+CALL_WITH_INTERMEDIATE_ARTIFACTS = "call_with_intermediate_artifacts"
+CALL_CONTEXT_FROM_WITHOUT_CALL = "call_context_from_without_call"
+CALL_INVALID_CONTEXT_REF = "call_invalid_context_ref"
 
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576

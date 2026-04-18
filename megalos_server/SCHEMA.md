@@ -11,7 +11,7 @@ Every workflow YAML file must be a mapping with the following fields.
 | `category` | string | yes | Grouping tag (e.g. `professional`, `writing_communication`, `analysis_decision`). |
 | `output_format` | string | yes | Expected output type (e.g. `text`, `structured_code`). |
 | `steps` | list | yes | Ordered list of step mappings (at least one). |
-| `schema_version` | string | no (defaults to `"0.3"`) | Schema spec version this workflow targets. Omit to get the default. |
+| `schema_version` | string | no (defaults to `"0.4"`) | Schema spec version this workflow targets. Omit to get the default. |
 | `conversation_repair` | mapping | no | Optional overrides for default repair-behavior strings injected into step responses. See "Conversation repair defaults" section. |
 
 ## Step fields
@@ -28,6 +28,50 @@ Each entry in `steps` is a mapping with:
 | `step_description` | string | no | One-sentence, action-oriented summary of what this step does. Authoring metadata only — not injected into step responses. See "Directive quality" section for phrasing principles. |
 | `collect` | boolean | no | When `true`, the step is flagged as a structured data-collection step. The validator requires `output_schema` to be present on the same step. Used for steps where the LLM must gather specific, schema-conformant input from the user. |
 | `precondition` | mapping | no | Optional gate on whether this step is reachable, declared against prior-step output. Exactly one of two predicates: `when_equals` (scalar equality) or `when_present` (presence check). See "Precondition" section below. |
+| `call` | string | no | Name of a child workflow to invoke declaratively when this step is reached. See "Sub-workflow call" section below. |
+| `call_context_from` | string | no | Optional ref-path (`step_data.<step_id>[.<field>...]`) selecting a sub-tree of parent `step_data` to seed the child workflow's context. Requires `call` on the same step. See "Sub-workflow call" section below. |
+
+## Sub-workflow call
+
+A step may declare a `call` field to invoke a child workflow declaratively. The child runs to completion and its return value is surfaced back to the parent step.
+
+**`call: <child_workflow_name>`** — names the child workflow to invoke:
+
+```yaml
+- id: analyze
+  title: Run analysis sub-workflow
+  directive_template: hand off to analysis child
+  gates: [done]
+  anti_patterns: [none]
+  call: analysis_child
+```
+
+**`call_context_from: step_data.<step_id>[.<field>...]`** — optional ref-path that selects a sub-tree of parent `step_data` to seed the child's context. Uses the same ref-path grammar as `precondition` (see above).
+
+```yaml
+- id: analyze
+  title: Run analysis with topic from earlier step
+  directive_template: hand off to analysis child
+  gates: [done]
+  anti_patterns: [none]
+  call: analysis_child
+  call_context_from: step_data.intake.topic
+```
+
+**Mutex rules (parse-time):**
+
+- `call` + `collect: true` is rejected — sub-workflow steps cannot also collect structured data. (error code: `call_with_collect`)
+- `call` + `intermediate_artifacts` is rejected — sub-workflow steps cannot also produce intermediate artifacts. (error code: `call_with_intermediate_artifacts`)
+- `call_context_from` without `call` on the same step is rejected. (error code: `call_context_from_without_call`)
+- `call_context_from` whose value is not a valid ref-path is rejected. (error code: `call_invalid_context_ref`)
+
+**Allowed compositions:**
+
+- `call` + `output_schema` — allowed. The `output_schema` validates the child workflow's return value.
+- `call` + `branches` — allowed. Branching evaluates against the child's return after it completes.
+- `call` + `precondition` — allowed. The precondition gates whether the child is invoked at all.
+
+**Cross-workflow checks** (target existence and cycle detection across the `call` graph) run at workflow-load time; see M004/S01/T02 notes in `docs/AUTHORING.md` for details.
 
 ## Precondition
 
@@ -69,15 +113,16 @@ Multiple errors are reported at once when using `python3 -m megalos_server.valid
 
 ## Schema versioning
 
-The top-level `schema_version` field declares which schema spec a workflow targets. It is an optional string. When omitted, `load_workflow` fills in `"0.3"` as the default.
+The top-level `schema_version` field declares which schema spec a workflow targets. It is an optional string. When omitted, `load_workflow` fills in `"0.4"` as the default.
 
-Current version: **`0.3`**. This is the schema documented in this file.
+Current version: **`0.4`**. This is the schema documented in this file.
 
 | Version | Notes |
 |---------|-------|
 | `0.1`   | Initial schema (M009). |
 | `0.2`   | Adds the optional `collect` boolean on steps; `output_schema` validation errors now include a JSON field path prefix (e.g., `"title: ..."`). |
 | `0.3`   | Adds the optional `precondition` field on steps with `when_equals`/`when_present` predicates (M003/S01). |
+| `0.4`   | Adds the optional `call` and `call_context_from` fields on steps for sub-workflow invocation (M004/S01). The `enter_sub_workflow` MCP tool is registered as a placeholder; runtime arrives in M004/S02. |
 
 Future schema changes will bump this value explicitly. Unrecognized values pass through without error — the server does not currently reject future or unknown versions. (If cross-version incompatibility becomes a concern, rejection will be added then.)
 
