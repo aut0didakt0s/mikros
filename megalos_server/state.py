@@ -196,6 +196,29 @@ def invalidate_steps_after(session_id: str, step_ids: list[str]) -> None:
         )
 
 
+def clear_step_data_key(session_id: str, key: str) -> None:
+    """Delete a single step_data key. RMW; mirrors set_called_session shape.
+
+    Used by revise_step when the target is a call-step: standard
+    invalidate_steps_after only clears steps AFTER the target, but the
+    propagated child artifact lives at step_data[target], so the target's own
+    key must be cleared too. Raises KeyError if session not found.
+    """
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT step_data FROM sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Session not found: {session_id}")
+        step_data = json.loads(row[0])
+        step_data.pop(key, None)
+        conn.execute(
+            "UPDATE sessions SET step_data = ?, updated_at = ? WHERE session_id = ?",
+            (json.dumps(step_data), _now_iso(), session_id),
+        )
+
+
 def increment_retry(session_id: str, step_id: str) -> int:
     """Increment and return retry count for a step."""
     with db.transaction() as conn:

@@ -264,6 +264,130 @@ def _evaluate_guardrails(guardrails, content, session, step_id):
     return None
 
 
+def _advance_parent(
+    parent_sid: str, parent_wf: dict, call_step: dict, idx: int, step_data: dict
+) -> dict:
+    """Advance parent session after child-artifact propagation.
+
+    Returns the parent's next-step directive dict. Next-step resolution:
+    call+branches → default_branch (guaranteed present at parse time by
+    schema.py's call_branches_without_default rule; see S01 amendment
+    dbae376). Linear → next step in list, _COMPLETE if last.
+    """
+    steps = parent_wf["steps"]
+
+    if call_step.get("branches"):
+        next_step_id = call_step["default_branch"]
+    else:
+        is_last = idx == len(steps) - 1
+        next_step_id = _COMPLETE if is_last else steps[idx + 1]["id"]
+
+    try:
+        next_step_id, _ = _apply_skip_loop(next_step_id, parent_wf, step_data, force_branched=False)
+    except _SkippedPredecessor as e:
+        return error_response(
+            "skipped_predecessor_reference",
+            f"Step '{e.referencing_step_id}' precondition references skipped predecessor '{e.sid}'",
+            session_id=parent_sid,
+            step_id=call_step["id"],
+            referenced_step=e.sid,
+            referencing_field="precondition",
+        )
+
+    if next_step_id != _COMPLETE:
+        state.increment_visit(parent_sid, next_step_id)
+    state.update_session(parent_sid, current_step=next_step_id, step_data=step_data)
+
+    result: dict = {
+        "session_id": parent_sid,
+        "submitted": {"id": call_step["id"], "title": call_step["title"]},
+        "progress": f"step {idx + 1} of {len(steps)} complete",
+        "propagated_from_sub_workflow": True,
+    }
+    if next_step_id == _COMPLETE:
+        result["status"] = "workflow_complete"
+        result["message"] = "All steps complete. Call generate_artifact to produce final output."
+    else:
+        _, nxt = _find_step(parent_wf, next_step_id)
+        result["next_step"] = {"id": nxt["id"], "title": nxt["title"]}
+        result["directive"] = nxt["directive_template"]
+        result["do_not"] = _DO_NOT_RULES
+        result["conversation_repair"] = _repair_for(parent_wf)
+        result["gates"] = nxt["gates"]
+        if nxt.get("inject_context"):
+            result["injected_context"] = _assemble_context(nxt["inject_context"], step_data)
+        if nxt.get("directives"):
+            result["directives"] = nxt["directives"]
+        if nxt.get("branches"):
+            result["branches"] = nxt["branches"]
+            if nxt.get("default_branch"):
+                result["default_branch"] = nxt["default_branch"]
+    return result
+
+
+def _propagate_to_parent(child_session: dict, child_wf: dict, workflows: dict) -> dict:
+    """Bridge: child completed → propagate final artifact to parent, advance parent.
+
+    On parent output_schema failure, escalates the parent and retains the child
+    (T03 will enrich the escalation payload). On state drift (parent not at a
+    call-step anymore), escalates defensively and retains the child. Otherwise
+    writes child artifact to parent.step_data[call_step_id], deletes child,
+    clears parent.called_session, and returns parent's next-step directive.
+    """
+    parent_sid = child_session["parent_session_id"]
+    child_sid = child_session["session_id"]
+    last_step_id = child_wf["steps"][-1]["id"]
+    artifact = child_session["step_data"].get(last_step_id, "")
+
+    parent_resolved, err = _resolve_session(parent_sid, workflows)
+    if err:
+        # Parent vanished mid-flight — defense in depth. Return the error;
+        # child stays at _COMPLETE retained.
+        return err
+    parent_session, parent_wf = parent_resolved
+
+    call_step_id = parent_session["current_step"]
+    idx, call_step = _find_step(parent_wf, call_step_id)
+    if call_step is None or "call" not in call_step:
+        # Parent drifted off the call-step (e.g. revised). Escalate + retain child.
+        state.set_escalation(
+            parent_sid,
+            "sub_workflow_state_drift",
+            f"parent at '{call_step_id}' is not a call-step",
+        )
+        return error_response(
+            "session_escalated",
+            "parent state drift during sub-workflow propagation",
+            parent_session_id=parent_sid,
+            child_session_id=child_sid,
+        )
+
+    if call_step.get("output_schema"):
+        validation_errors = _validate_output(artifact, call_step)
+        if validation_errors is not None:
+            state.set_escalation(
+                parent_sid,
+                "sub_workflow_output_schema_fail",
+                f"child artifact failed parent call-step output_schema: {'; '.join(validation_errors)}",
+            )
+            return error_response(
+                "session_escalated",
+                "parent output_schema failed on child artifact",
+                parent_session_id=parent_sid,
+                child_session_id=child_sid,
+                call_step_id=call_step_id,
+                validation_errors=validation_errors,
+            )
+
+    parent_step_data = parent_session["step_data"]
+    parent_step_data[call_step_id] = artifact
+
+    state.delete_session(child_sid)
+    state.set_called_session(parent_sid, None)
+
+    return _advance_parent(parent_sid, parent_wf, call_step, idx, parent_step_data)
+
+
 def register_tools(mcp, workflows):
     """Register workflow tools on the FastMCP app."""
 
@@ -583,6 +707,14 @@ def register_tools(mcp, workflows):
                 state.increment_visit(session_id, next_step_id)
             state.update_session(session_id, current_step=next_step_id, step_data=step_data)
 
+            # Sub-workflow bridge: child completed → propagate to parent.
+            if next_step_id == _COMPLETE and session.get("parent_session_id"):
+                return _propagate_to_parent(
+                    {**session, "current_step": next_step_id, "step_data": step_data},
+                    wf,
+                    workflows,
+                )
+
             result: dict = {
                 "session_id": session_id,
                 "submitted": {"id": step["id"], "title": step["title"]},
@@ -700,6 +832,14 @@ def register_tools(mcp, workflows):
 
         state.update_session(session_id, current_step=next_step_id, step_data=step_data)
 
+        # Sub-workflow bridge: child completed → propagate to parent.
+        if next_step_id == _COMPLETE and session.get("parent_session_id"):
+            return _propagate_to_parent(
+                {**session, "current_step": next_step_id, "step_data": step_data},
+                wf,
+                workflows,
+            )
+
         result = {
             "session_id": session_id,
             "submitted": {"id": step["id"], "title": step["title"]},
@@ -751,7 +891,10 @@ def register_tools(mcp, workflows):
                 session_id=session_id,
             )
 
-        if step_id not in session["step_data"]:
+        # Call-steps: allow revise even when step_data[step_id] absent if a child is
+        # retained/in-flight (propagation may have failed). Otherwise require completion.
+        is_call_with_child = "call" in target_step and session.get("called_session") is not None
+        if step_id not in session["step_data"] and not is_call_with_child:
             return error_response(
                 "invalid_argument",
                 f"Step '{step_id}' has not been completed yet",
@@ -759,14 +902,27 @@ def register_tools(mcp, workflows):
                 session_id=session_id,
             )
 
-        previous_content = session["step_data"][step_id]
+        previous_content = session["step_data"].get(step_id, "")
 
         steps_after = [s["id"] for s in wf["steps"][target_idx + 1:]]
         state.invalidate_steps_after(session_id, steps_after)
 
+        # Call-step cleanup: delete retained child, clear link, clear target's step_data.
+        retained_child_deleted = None
+        if "call" in target_step:
+            called_sid = session.get("called_session")
+            if called_sid:
+                try:
+                    state.delete_session(called_sid)
+                except KeyError:
+                    pass  # Child already gone; clear link anyway.
+                state.set_called_session(session_id, None)
+                retained_child_deleted = called_sid
+            state.clear_step_data_key(session_id, step_id)
+
         state.update_session(session_id, current_step=step_id)
 
-        return {
+        response = {
             "session_id": session_id,
             "revised_step": {"id": target_step["id"], "title": target_step["title"]},
             "previous_content": previous_content,
@@ -776,6 +932,9 @@ def register_tools(mcp, workflows):
             "conversation_repair": _repair_for(wf),
             "gates": target_step["gates"],
         }
+        if retained_child_deleted is not None:
+            response["retained_child_deleted"] = retained_child_deleted
+        return response
 
     @mcp.tool()
     @_trap_errors("parent_session_id")
