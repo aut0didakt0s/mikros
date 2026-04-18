@@ -1,9 +1,25 @@
-"""Tests for step-level `call` + `call_context_from` grammar and parse-time rejects (M004/S01/T01)."""
+"""Tests for step-level `call` + `call_context_from` grammar and parse-time rejects (M004/S01/T01).
+
+Also cross-workflow validation: call target existence + cycle detection (M004/S01/T02).
+"""
 
 import os
 import tempfile
 
-from megalos_server.schema import validate_workflow
+import pytest
+
+from megalos_server import create_app
+from megalos_server.schema import validate_workflow, validate_workflow_calls
+
+
+def _make_wf(name: str, steps: list[dict]) -> dict:
+    return {"name": name, "description": "", "category": "test",
+            "output_format": "markdown", "steps": steps}
+
+
+def _step_call(step_id: str, target: str) -> dict:
+    return {"id": step_id, "title": "", "directive_template": "",
+            "gates": [], "anti_patterns": [], "call": target}
 
 
 def _write_and_validate(yaml_str: str) -> list[str]:
@@ -192,3 +208,84 @@ steps:
 """
     errors = _write_and_validate(yaml_str)
     assert any("call_invalid_context_ref" in e for e in errors), errors
+
+
+# --- T02: cross-workflow validation --------------------------------------
+
+
+def test_clean_dag_passes():
+    workflows = {
+        "A": _make_wf("A", [_step_call("s1", "B"), _step_call("s2", "C")]),
+        "B": _make_wf("B", [_step_call("s1", "D")]),
+        "C": _make_wf("C", []),
+        "D": _make_wf("D", []),
+    }
+    assert validate_workflow_calls(workflows) == []
+
+
+def test_unknown_call_target_rejected():
+    workflows = {
+        "A": _make_wf("A", [_step_call("s1", "missing_child")]),
+    }
+    errors = validate_workflow_calls(workflows)
+    assert any("unknown_call_target" in e and "missing_child" in e for e in errors), errors
+
+
+def test_self_cycle_rejected():
+    workflows = {
+        "A": _make_wf("A", [_step_call("s1", "A")]),
+    }
+    errors = validate_workflow_calls(workflows)
+    assert any("call_cycle_detected" in e for e in errors), errors
+
+
+def test_direct_cycle_rejected():
+    workflows = {
+        "A": _make_wf("A", [_step_call("s1", "B")]),
+        "B": _make_wf("B", [_step_call("s1", "A")]),
+    }
+    errors = validate_workflow_calls(workflows)
+    assert any("call_cycle_detected" in e for e in errors), errors
+
+
+def test_indirect_cycle_rejected():
+    workflows = {
+        "A": _make_wf("A", [_step_call("s1", "B")]),
+        "B": _make_wf("B", [_step_call("s1", "C")]),
+        "C": _make_wf("C", [_step_call("s1", "A")]),
+    }
+    errors = validate_workflow_calls(workflows)
+    assert any("call_cycle_detected" in e and "A -> B -> C -> A" in e for e in errors), errors
+
+
+def test_create_app_raises_on_call_cycle(tmp_path):
+    parent = tmp_path / "parent.yaml"
+    child = tmp_path / "child.yaml"
+    parent.write_text(
+        "name: parent\n"
+        "description: p\n"
+        "category: test\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: s1\n"
+        "    title: hand off\n"
+        "    directive_template: do\n"
+        "    gates: [done]\n"
+        "    anti_patterns: [none]\n"
+        "    call: child\n"
+    )
+    child.write_text(
+        "name: child\n"
+        "description: c\n"
+        "category: test\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: s1\n"
+        "    title: hand back\n"
+        "    directive_template: do\n"
+        "    gates: [done]\n"
+        "    anti_patterns: [none]\n"
+        "    call: parent\n"
+    )
+    with pytest.raises(ValueError, match="call_cycle_detected"):
+        create_app(workflow_dir=tmp_path)

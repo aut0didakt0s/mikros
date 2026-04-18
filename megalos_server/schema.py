@@ -271,6 +271,71 @@ def _validate_workflow_preconditions(steps: list, errors: list[str]) -> None:
                 )
 
 
+def validate_workflow_calls(workflows: dict[str, dict]) -> list[str]:
+    """Cross-workflow checks: call targets exist; the call graph is acyclic.
+
+    Returns a list of error messages (empty list = valid).
+    """
+    errors: list[str] = []
+    # Build adjacency: parent_name -> [(step_id, target_name), ...]
+    edges: dict[str, list[tuple[str, str]]] = {}
+    for parent_name, wf in workflows.items():
+        steps = wf.get("steps", [])
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict) or "call" not in step:
+                continue
+            target = step["call"]
+            step_id = step.get("id", "?")
+            if not isinstance(target, str):
+                continue  # per-step parse already rejected this
+            edges.setdefault(parent_name, []).append((step_id, target))
+            if target not in workflows:
+                errors.append(
+                    f"Workflow '{parent_name}' step '{step_id}' calls unknown workflow "
+                    f"'{target}' (code: unknown_call_target)"
+                )
+    # Cycle detection: iterative DFS with white/gray/black coloring.
+    # Edges collapse multi-edges to simple edges for cycle purposes.
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {name: WHITE for name in workflows}
+
+    def visit(start: str) -> None:
+        # Iterative DFS; stack carries (node, neighbor_iter, path_so_far).
+        # path_so_far lets us emit the actual cycle when we hit a GRAY node.
+        stack: list[tuple[str, list[str], list[str]]] = []
+        outgoing = sorted({t for _sid, t in edges.get(start, []) if t in workflows})
+        color[start] = GRAY
+        stack.append((start, outgoing, [start]))
+        while stack:
+            node, remaining, path = stack[-1]
+            if not remaining:
+                color[node] = BLACK
+                stack.pop()
+                continue
+            nxt = remaining.pop(0)
+            if color[nxt] == GRAY:
+                # Cycle: nxt is somewhere in `path`. Slice from there to end + nxt.
+                idx = path.index(nxt)
+                cycle_path = path[idx:] + [nxt]
+                errors.append(
+                    f"call cycle detected: {' -> '.join(cycle_path)} "
+                    f"(code: call_cycle_detected)"
+                )
+                # Continue without recursing into nxt — one cycle report per entry-point edge.
+            elif color[nxt] == WHITE:
+                color[nxt] = GRAY
+                nxt_outgoing = sorted({t for _sid, t in edges.get(nxt, []) if t in workflows})
+                stack.append((nxt, nxt_outgoing, path + [nxt]))
+            # BLACK = already fully explored; skip.
+
+    for name in sorted(workflows):
+        if color[name] == WHITE:
+            visit(name)
+    return errors
+
+
 def validate_workflow(path: str) -> tuple[list[str], dict | None]:
     """Validate a workflow YAML file. Returns (errors, parsed_doc). Empty errors = valid."""
     try:

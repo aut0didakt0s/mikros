@@ -5,7 +5,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from megalos_server.middleware import ValidationErrorMiddleware
-from megalos_server.schema import load_workflow
+from megalos_server.schema import load_workflow, validate_workflow_calls
 from megalos_server.tools import register_tools
 
 
@@ -20,6 +20,10 @@ def create_app(workflow_dir: str | Path | None = None) -> FastMCP:
     for yaml_path in wf_path.glob("*.yaml"):
         wf = load_workflow(str(yaml_path))
         workflows[wf["name"]] = wf
+    # Cross-workflow validation: call targets exist and the call graph is acyclic.
+    call_errors = validate_workflow_calls(workflows)
+    if call_errors:
+        raise ValueError(call_errors[0])
     if not workflows:
         raise RuntimeError(f"No workflow YAML files found in {wf_path}")
     mcp = FastMCP("megalos")

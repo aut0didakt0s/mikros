@@ -18,6 +18,8 @@ CALL_WITH_COLLECT = "call_with_collect"
 CALL_WITH_INTERMEDIATE_ARTIFACTS = "call_with_intermediate_artifacts"
 CALL_CONTEXT_FROM_WITHOUT_CALL = "call_context_from_without_call"
 CALL_INVALID_CONTEXT_REF = "call_invalid_context_ref"
+UNKNOWN_CALL_TARGET = "unknown_call_target"
+CALL_CYCLE_DETECTED = "call_cycle_detected"
 
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576
