@@ -1,0 +1,46 @@
+# m004_s03_output_schema_fail_parent.yaml — M004/S03/T01 pair 4 (parent)
+#
+# Contract path: parent call-step carries an output_schema requiring a field
+# the child does NOT produce. Child completes normally; on propagation, parent
+# escalates and the child is retained (not auto-deleted). Failure response
+# carries the `called_workflow_error` wrapper with
+# child_error.reason == "parent_output_schema_fail".
+
+schema_version: "0.3"
+name: m004_s03_output_schema_fail_parent
+description: Parent whose output_schema rejects the child's final artifact.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: p1
+    title: Prep
+    directive_template: Brief intro before delegating.
+    gates:
+      - intro written
+    anti_patterns:
+      - Skipping the intro
+
+  - id: p2
+    title: Delegate and validate
+    directive_template: Hand off and expect an approval JSON.
+    gates:
+      - handoff performed
+    anti_patterns:
+      - Accepting missing approval
+    call: m004_s03_output_schema_fail_child
+    output_schema:
+      type: object
+      required: [approval]
+      properties:
+        approval:
+          type: string
+          minLength: 2
+
+  - id: p3
+    title: Wrap up
+    directive_template: Only reached on successful propagation.
+    gates:
+      - wrap-up written
+    anti_patterns:
+      - Reaching wrap-up when escalated

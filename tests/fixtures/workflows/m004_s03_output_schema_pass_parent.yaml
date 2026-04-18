@@ -1,0 +1,45 @@
+# m004_s03_output_schema_pass_parent.yaml — M004/S03/T01 pair 3 (parent)
+#
+# Contract path: parent call-step carries an output_schema matching the child's
+# final artifact shape. On propagation the schema validates cleanly, parent
+# advances past the call-step, and parent.step_data[call_step_id] holds the
+# child's final JSON payload.
+
+schema_version: "0.3"
+name: m004_s03_output_schema_pass_parent
+description: Parent with passing output_schema on its call-step.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: p1
+    title: Prep
+    directive_template: Brief intro before delegating.
+    gates:
+      - intro written
+    anti_patterns:
+      - Skipping the intro
+
+  - id: p2
+    title: Delegate and validate
+    directive_template: Hand off and expect a verdict JSON.
+    gates:
+      - handoff performed
+    anti_patterns:
+      - Accepting invalid verdict
+    call: m004_s03_output_schema_pass_child
+    output_schema:
+      type: object
+      required: [verdict]
+      properties:
+        verdict:
+          type: string
+          minLength: 2
+
+  - id: p3
+    title: Wrap up
+    directive_template: Summarize the verdict received from the child.
+    gates:
+      - summary written
+    anti_patterns:
+      - Ignoring child verdict

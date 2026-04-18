@@ -1,0 +1,28 @@
+# m004_s03_call_context_from_child.yaml — M004/S03/T01 pair 2 (child)
+#
+# First step exists only to receive the parent-extracted context via the
+# enter_sub_workflow response `context` field (no templating layer — runtime
+# surfaces the seeded string directly).
+
+schema_version: "0.3"
+name: m004_s03_call_context_from_child
+description: Child that runs against the parent-seeded topic context.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: c1
+    title: Acknowledge topic
+    directive_template: Acknowledge the topic provided via seeded context.
+    gates:
+      - topic acknowledged
+    anti_patterns:
+      - Ignoring seeded context
+
+  - id: c2
+    title: Emit brief
+    directive_template: Emit a one-line brief on the topic.
+    gates:
+      - brief emitted
+    anti_patterns:
+      - Returning empty content

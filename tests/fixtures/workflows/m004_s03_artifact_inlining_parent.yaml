@@ -1,0 +1,34 @@
+# m004_s03_artifact_inlining_parent.yaml — M004/S03/T01 pair 1 (parent)
+#
+# Contract path: child markdown artifact inlines into parent via generate_artifact
+# with heading hierarchy preserved (no flattening).
+#
+# Parent has two steps: an intro step and a call-step that hands off to the
+# research-brief child. After propagation, parent.step_data[research] holds the
+# child's final markdown. generate_artifact(output_format=text) joins step
+# contents with double newlines; the child's `## Findings` subsection must
+# survive the join intact.
+
+schema_version: "0.3"
+name: m004_s03_artifact_inlining_parent
+description: Parent inlining child markdown artifact into its own output.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: intro
+    title: Parent intro
+    directive_template: Write a short intro paragraph for the final report.
+    gates:
+      - intro written
+    anti_patterns:
+      - Skipping the intro
+
+  - id: research
+    title: Delegate research
+    directive_template: Hand off to the research-brief child workflow.
+    gates:
+      - research delegated
+    anti_patterns:
+      - Skipping the handoff
+    call: m004_s03_artifact_inlining_child

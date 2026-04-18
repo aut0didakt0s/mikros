@@ -1,0 +1,34 @@
+# m004_s03_output_schema_pass_child.yaml — M004/S03/T01 pair 3 (child)
+#
+# Final step produces a JSON payload matching the parent's output_schema.
+# Last-step output is what propagates into parent.step_data[call_step_id].
+
+schema_version: "0.3"
+name: m004_s03_output_schema_pass_child
+description: Child emitting a verdict JSON that matches the parent schema.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: c1
+    title: Investigate
+    directive_template: Describe the investigation.
+    gates:
+      - investigation described
+    anti_patterns:
+      - Skipping investigation
+
+  - id: c2
+    title: Emit verdict
+    directive_template: Emit a JSON object with a verdict string field.
+    gates:
+      - verdict emitted as JSON
+    anti_patterns:
+      - Emitting freeform prose
+    output_schema:
+      type: object
+      required: [verdict]
+      properties:
+        verdict:
+          type: string
+          minLength: 2

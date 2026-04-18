@@ -1,0 +1,28 @@
+# m004_s03_artifact_inlining_child.yaml — M004/S03/T01 pair 1 (child)
+#
+# Produces a markdown artifact on its final step. The last step's content is
+# what gets propagated into parent.step_data[call_step_id], so subsection
+# headings in the child's final content must survive parent artifact inlining.
+
+schema_version: "0.3"
+name: m004_s03_artifact_inlining_child
+description: Research-brief child emitting a markdown artifact with subsections.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: gather
+    title: Gather sources
+    directive_template: List the sources you plan to consult.
+    gates:
+      - sources listed
+    anti_patterns:
+      - Guessing sources
+
+  - id: brief
+    title: Emit markdown brief
+    directive_template: Produce a markdown brief with a `## Findings` subsection.
+    gates:
+      - brief contains Findings subsection
+    anti_patterns:
+      - Flattening markdown

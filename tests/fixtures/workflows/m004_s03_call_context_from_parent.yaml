@@ -1,0 +1,43 @@
+# m004_s03_call_context_from_parent.yaml — M004/S03/T01 pair 2 (parent)
+#
+# Contract path: parent step_1 collects {topic, audience} JSON; the call-step
+# declares `call_context_from: step_data.s1.topic` so the child session's
+# `context` is seeded with the authored topic string — proving that subtree
+# extraction + injection on spawn works.
+
+schema_version: "0.3"
+name: m004_s03_call_context_from_parent
+description: Parent seeding child context via call_context_from subtree extraction.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: s1
+    title: Collect topic
+    directive_template: Ask the user for a topic and audience.
+    gates:
+      - topic captured
+      - audience captured
+    anti_patterns:
+      - Guessing topic or audience
+    collect: true
+    output_schema:
+      type: object
+      required: [topic, audience]
+      properties:
+        topic:
+          type: string
+          minLength: 2
+        audience:
+          type: string
+          minLength: 2
+
+  - id: s2
+    title: Delegate to child
+    directive_template: Hand off to the child with just the topic.
+    gates:
+      - handoff performed
+    anti_patterns:
+      - Leaking audience to child
+    call: m004_s03_call_context_from_child
+    call_context_from: step_data.s1.topic

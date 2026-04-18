@@ -1,0 +1,28 @@
+# m004_s03_output_schema_fail_child.yaml — M004/S03/T01 pair 4 (child)
+#
+# Child completes normally with freeform content — critically, its final step
+# does NOT emit the `approval` field the parent's output_schema requires, so
+# the parent rejects on propagation.
+
+schema_version: "0.3"
+name: m004_s03_output_schema_fail_child
+description: Child emitting freeform output that fails the parent output_schema.
+category: analysis_decision
+output_format: text
+
+steps:
+  - id: c1
+    title: Investigate
+    directive_template: Describe the investigation.
+    gates:
+      - investigation described
+    anti_patterns:
+      - Skipping investigation
+
+  - id: c2
+    title: Emit freeform
+    directive_template: Emit freeform prose — no `approval` field.
+    gates:
+      - freeform emitted
+    anti_patterns:
+      - Emitting an approval JSON
