@@ -7,10 +7,7 @@ Covers:
 - migration idempotency via PRAGMA table_info
 """
 
-import os
-import sqlite3
-
-import pytest
+import pytest  # type: ignore[import-not-found]
 
 from megalos_server import db, state
 from megalos_server.main import WORKFLOWS
