@@ -11,7 +11,7 @@
 - [The YAML schema](#the-yaml-schema)
 - [The MCP server runtime](#the-mcp-server-runtime)
   - [Public API](#public-api)
-  - [MCP tools (9)](#mcp-tools-9)
+  - [MCP tools (10)](#mcp-tools-10)
   - [Mechanical enforcement](#mechanical-enforcement)
   - [Session state](#session-state)
 - [MCP servers](#mcp-servers)
@@ -88,7 +88,7 @@ This repo itself bundles only `megalos_server/workflows/example.yaml` as a refer
 
 ### MCP tools
 
-`list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `revise_step`, `list_sessions`, `delete_session`, `generate_artifact`.
+`list_workflows`, `start_workflow`, `get_state`, `get_guidelines`, `submit_step`, `revise_step`, `enter_sub_workflow`, `list_sessions`, `delete_session`, `generate_artifact`.
 
 The server never calls any LLM. Zero LLM imports, zero provider references. Tool responses are plain dicts (`directive`, `gates`, `anti_patterns`, plus 7 global `_DO_NOT_RULES`).
 

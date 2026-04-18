@@ -20,6 +20,7 @@ CALL_CONTEXT_FROM_WITHOUT_CALL = "call_context_from_without_call"
 CALL_INVALID_CONTEXT_REF = "call_invalid_context_ref"
 UNKNOWN_CALL_TARGET = "unknown_call_target"
 CALL_CYCLE_DETECTED = "call_cycle_detected"
+SUB_WORKFLOW_RUNTIME_NOT_IMPLEMENTED = "sub_workflow_runtime_not_implemented"
 
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576

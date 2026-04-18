@@ -778,6 +778,22 @@ def register_tools(mcp, workflows):
         }
 
     @mcp.tool()
+    @_trap_errors("parent_session_id")
+    def enter_sub_workflow(parent_session_id: str, call_step_id: str) -> dict:
+        """Invoke a child workflow from a parent step that declares `call:`.
+
+        Placeholder in M004/S01: returns `sub_workflow_runtime_not_implemented`
+        for any input. Runtime semantics (child session creation, propagation,
+        escalation wrap, auto-terminate-on-success) arrive in M004/S02.
+        """
+        return error_response(
+            "sub_workflow_runtime_not_implemented",
+            "runtime not implemented; arrives in M004/S02",
+            parent_session_id=parent_session_id,
+            call_step_id=call_step_id,
+        )
+
+    @mcp.tool()
     @_trap_errors()
     def list_sessions() -> dict:
         """List all sessions with their status (active/completed)."""
