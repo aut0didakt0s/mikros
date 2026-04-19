@@ -10,9 +10,10 @@ megálos is a deterministic, lightweight conversational workflow runtime. It bor
 2. [Schema reference](#2-schema-reference)
 3. [Design principles](#3-design-principles)
 4. [Composing workflows with `call:`](#4-composing-workflows-with-call)
-5. [Worked example — build `interview-prep.yaml`](#5-worked-example--build-interview-prepyaml)
-6. [Common mistakes](#6-common-mistakes)
-7. [Validation workflow](#7-validation-workflow)
+5. [Client-driven digressions with `push_flow` and `pop_flow`](#5-client-driven-digressions-with-push_flow-and-pop_flow)
+6. [Worked example — build `interview-prep.yaml`](#6-worked-example--build-interview-prepyaml)
+7. [Common mistakes](#7-common-mistakes)
+8. [Validation workflow](#8-validation-workflow)
 
 ---
 
@@ -332,7 +333,73 @@ A serial `call:` chain — parent calls child A, which calls child B, which call
 
 ---
 
-## 5. Worked example — build `interview-prep.yaml`
+## 5. Client-driven digressions with `push_flow` and `pop_flow`
+
+`call:` ([§4](#4-composing-workflows-with-call)) is the **author-static** composition seam: the parent's YAML declares a call-step, the runtime spawns the child, the parent auto-resumes on the child's completion. `push_flow` and `pop_flow` are the **client-dynamic** companion: a digression the client-LLM opens at runtime when the user wanders off-topic, and closes explicitly (or implicitly, on child completion). Both primitives produce a stack frame above the current session; both auto-resume the outer on child completion. Where they differ is **who decides the spawn**, and whether the child's artifact propagates.
+
+### 5a. `push_flow` vs `call:`
+
+| | `call:` | `push_flow` |
+|---|---------|-------------|
+| Declared where | Parent's YAML (`call: <child_name>` on a step) | Client invokes at runtime |
+| Spawn trigger | `enter_sub_workflow` on the call-step | Client-LLM decides mid-conversation |
+| Target selection | Fixed by the call-step | Chosen at runtime by `workflow_type` arg |
+| Data handoff | `call_context_from: step_data.<path>` (authored) | `context` string seeded from the conversation at push time |
+| On child completion | Child's final `step_data` propagates to `parent.step_data[call_step_id]`; call-step advances | Outer session simply resumes at `paused_at_step`; no artifact propagates |
+| On child failure | Wrapped into parent escalation under `called_workflow_error` ([§4e](#4e-when-a-child-fails)) | Same parent-owned guards; the digression is retained for inspection |
+| Abandon path | `revise_step` on the parent's call-step | `pop_flow(session_id)` on the digression, or let it run to completion |
+
+Reach for `call:` when the composition is part of the workflow's **deterministic structure** — the child always runs at this point, its artifact feeds the next step, and every execution of the parent traverses the same seam. Reach for `push_flow` when the composition is an **interrupt surface** — the user might digress into a clarification, a lookup, or a sub-task that the author wants to make available *if the situation calls for it*, and only some conversations will use it.
+
+### 5b. `pop_flow` vs `delete_session`
+
+Both tools remove a session; they differ in which session and what the stack looks like afterwards.
+
+- **`pop_flow(session_id)`** pops a single digression frame. The session below resumes — that is the whole point. Use this to abandon a digression mid-flow when the client-LLM decides the detour is no longer relevant.
+- **`delete_session(session_id)`** terminates a session outright. When called on the root of a stack, the whole chain is torn down.
+
+`pop_flow` rejects two shapes:
+
+- **Call-frames (`frame_type_not_poppable`).** Call-frames are author-resumed — the parent's call-step owns the child. The authorised abandon path is `revise_step` on the parent's call-step, which unlinks and deletes the retained child. Cascading child failures reach the parent through `called_workflow_error` ([§4e](#4e-when-a-child-fails)); `pop_flow` is not a substitute for either.
+- **Sessions with no stack frame (`no_frame_to_pop`).** Bare sessions (never pushed onto, never pushed from) and the root of any stack have no own-frame row, so there is nothing to pop. Use `delete_session` to remove a root.
+
+### 5c. Enabling digression via `on_digression`
+
+The built-in `conversation_repair` defaults ([§2](#2-schema-reference)) include:
+
+```python
+"on_digression": "Acknowledge, then redirect to current step",
+```
+
+This default pre-dates `push_flow` and is deliberately restrictive: a workflow that has not opted in keeps the user on-topic by acknowledging the digression and returning to the current step. **If you want the client-LLM to open a digression via `push_flow`, you must override this default.** Without an override, `push_flow` exists as a runtime tool but nothing in the workflow's step response tells the client-LLM to reach for it.
+
+Override `on_digression` at the **workflow level** by adding a `conversation_repair` mapping at the top of the YAML. The string is injected verbatim into every step's `conversation_repair.on_digression` field, so phrase it as a direct instruction to the client-LLM — name the tool, name the target workflow(s), and name the parameters. Minimal shape:
+
+```yaml
+name: my_workflow
+description: ...
+category: ...
+output_format: text
+
+conversation_repair:
+  on_digression: >-
+    If the user asks a question clearly outside this workflow's scope, invoke
+    push_flow with workflow_type="<authorized-workflow-name>",
+    paused_at_step set to the current step id, and context set to a brief
+    framing of the user's question. The current step resumes automatically
+    when the digression completes or is popped.
+
+steps:
+  - id: ...
+```
+
+Keep the instruction concrete: name the authorised `workflow_type`s explicitly (a free-for-all invitation to push into any workflow is a worse failure mode than the default), and state the resume contract so the client-LLM knows not to try to carry state back manually. If different steps in the same workflow should expose different digression surfaces, express that branching inside the single workflow-level `on_digression` string — the schema accepts only one workflow-level override per field, and `conversation_repair` is not a per-step field.
+
+Keep the default in place when you want the workflow to stay on-rails — most teaching, collection, and short directive workflows are in this category. Override only when the domain genuinely benefits from a named digression surface (e.g., a coding workflow that authorises pushing into a lookup or a review sub-workflow when the user asks a clarifying question).
+
+---
+
+## 6. Worked example — build `interview-prep.yaml`
 
 This section builds a complete workflow from zero, one stage at a time, so you see the schema grow under your hands. The finished file lives at [`docs/examples/interview-prep.yaml`](examples/interview-prep.yaml) — open it in a second editor pane if you want to compare against the end state as you go. It is shipped as a **teaching artifact**: not a production workflow, not registered with any server, and deliberately categorised as `teaching_example` so nobody confuses it with something a domain repo should pick up.
 
@@ -346,7 +413,7 @@ The workflow walks a candidate through interview preparation in five steps, foll
 
 We will not get there in one leap. Each sub-section below adds a little more of the schema until the file passes the validator.
 
-### 5a. Top-level fields
+### 6a. Top-level fields
 
 Every workflow starts with four required top-level strings plus a non-empty `steps` list. Start a new file at `docs/examples/interview-prep.yaml` with just the header:
 
@@ -368,7 +435,7 @@ Why each field:
 
 `steps: []` is a placeholder. The validator will reject this as-is (it requires at least one step), which is fine: we are about to add one.
 
-### 5b. The first step skeleton
+### 6b. The first step skeleton
 
 A step needs five required fields: `id`, `title`, `directive_template`, `gates`, and `anti_patterns`. Replace the empty `steps` list with a first step:
 
@@ -386,7 +453,7 @@ steps:
 
 The `directive_template` is the heart of the step — it is the prompt the LLM will act on. Notice the shape: a concrete action (`Ask`), a specific observable output (three named fields), and an explicit prohibition (`Do not begin ... until all three are captured`). This is the directive-quality rule from [§3b](#3b-directive-quality-rules) applied end-to-end. A weaker version — *"Help the user identify what role they want to prep for"* — would be shorter and also useless, because it names no action the LLM can verify it took.
 
-### 5c. Adding `gates` and `anti_patterns`
+### 6c. Adding `gates` and `anti_patterns`
 
 Empty `gates` and `anti_patterns` lists parse, but they leave the step with no quality floor and no prohibitions. Fill them in:
 
@@ -410,7 +477,7 @@ Each gate is testable by reading the transcript — the [§3c](#3c-gate-design) 
 
 Rule of thumb: if every one of your `anti_patterns` would apply to any step of any workflow, you are restating the built-ins. Cut them and add something step-specific, or leave the list short.
 
-### 5d. Turning it into a `collect` step with an `output_schema`
+### 6d. Turning it into a `collect` step with an `output_schema`
 
 `identify_role` is not trying to reason or produce prose — its whole job is to elicit three structured fields that later steps will reference. That is exactly the case [§3a](#3a-when-to-use-collect-steps-and-how-to-pair-them-with-output_schema) describes. Mark the step as a collect step and pair it with an `output_schema`:
 
@@ -452,7 +519,7 @@ Two things changed:
 
 The schema is minimal: three required strings with a `minLength` floor. Resist the urge to add `enum` lists of "valid roles" or regex patterns — over-specified schemas become friction, and an under-specified schema would let a blank string through. `minLength: 2` is the boring, correct answer.
 
-### 5e. Fleshing out the remaining steps and running the validator
+### 6e. Fleshing out the remaining steps and running the validator
 
 With `identify_role` in shape, the remaining four steps follow the same recipe: required fields first, then optional `step_description` and `directives` where they earn their place. Two patterns worth calling out:
 
@@ -493,7 +560,7 @@ That is the full authoring loop: edit, validate, read the error, fix, re-validat
 
 ---
 
-## 6. Common mistakes
+## 7. Common mistakes
 
 These are the seven mistakes we see most often in first-draft workflows. Each is paired with a concrete fix and a cross-reference to the relevant section of this guide. Skim the headers on your first read; return to the details when the validator or a reviewer flags a problem.
 
@@ -532,11 +599,11 @@ ERROR: Step 'X' directives must be a mapping
 
 ---
 
-## 7. Validation workflow
+## 8. Validation workflow
 
 The validator is the authoring-time quality gate. It is fast, offline, and terse on purpose — you run it after every edit, read the error if there is one, fix, and run it again. No code executes; only the YAML is parsed and checked against the schema.
 
-### 7a. The clean run
+### 8a. The clean run
 
 From the repository root, run the validator against your workflow file:
 
@@ -550,9 +617,9 @@ Expected output:
 Valid.
 ```
 
-Exit code `0`. That is the full success signal. If your shell prints a prompt immediately after `Valid.`, your workflow is schema-conformant and ready to load. The validator deliberately says nothing about quality — that is what the design principles in [§3](#3-design-principles) and the common mistakes in [§6](#6-common-mistakes) are for.
+Exit code `0`. That is the full success signal. If your shell prints a prompt immediately after `Valid.`, your workflow is schema-conformant and ready to load. The validator deliberately says nothing about quality — that is what the design principles in [§3](#3-design-principles) and the common mistakes in [§7](#7-common-mistakes) are for.
 
-### 7b. A deliberate error
+### 8b. A deliberate error
 
 To see what a failure looks like, remove a required field. Take your working `interview-prep.yaml` and delete (or comment out) the first step's `id` line, so the step looks like:
 
@@ -583,6 +650,6 @@ Exit code `1`. Notes on how the validator reports errors:
 
 Restore the `id` line and you are back to `Valid.` This is the full authoring loop: edit, validate, read the error, fix, re-validate. Most first-draft workflows pass on the second or third run; after a few workflows you will start writing files that pass on the first try.
 
-### 7c. From validation to deployment
+### 8c. From validation to deployment
 
-Passing the validator means your workflow is loadable — every downstream runtime (the local `megalos-server`, a domain server on Horizon, a composed Remix) runs the same validator on startup, so a file that validates locally validates on deploy. It does **not** mean the workflow produces good conversations; that is what the design principles in [§3](#3-design-principles), the common mistakes in [§6](#6-common-mistakes), and a human reviewer are for.
+Passing the validator means your workflow is loadable — every downstream runtime (the local `megalos-server`, a domain server on Horizon, a composed Remix) runs the same validator on startup, so a file that validates locally validates on deploy. It does **not** mean the workflow produces good conversations; that is what the design principles in [§3](#3-design-principles), the common mistakes in [§7](#7-common-mistakes), and a human reviewer are for.
