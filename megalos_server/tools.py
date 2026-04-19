@@ -9,7 +9,10 @@ import jsonschema
 from . import state
 from .errors import (
     ARTIFACT_MAX,
+    BOTTOM_FRAME_POP_REJECTED,
     CONTENT_MAX,
+    FRAME_TYPE_NOT_POPPABLE,
+    NO_FRAME_TO_POP,
     SESSION_STACK_FULL,
     SUB_WORKFLOW_PENDING,
     error_response,
@@ -1419,6 +1422,82 @@ def register_tools(mcp, workflows):
         if first_step.get("directives"):
             result["directives"] = first_step["directives"]
         return result
+
+    @mcp.tool()
+    @_trap_errors("session_id")
+    def pop_flow(session_id: str) -> dict:
+        """Explicitly pop a digression frame and resume the frame below.
+
+        Client-driven counterpart to S01's auto-resume-on-complete path. Use this
+        when the digression is abandoned / no longer relevant mid-flow — as
+        opposed to submit_step driving it to __complete__, which triggers the
+        same resume path automatically.
+
+        Rejects call-frames (frame_type_not_poppable — call-frames are
+        author-declared and author-resumed; use revise_step on the parent's
+        call-step to abandon). Rejects bottom frames at depth 0
+        (bottom_frame_pop_rejected — use delete_session to remove a root).
+        Rejects bare sessions (no_frame_to_pop — nothing to pop).
+
+        Happy-path response mirrors the auto-resume-on-complete shape from
+        _resume_parent_after_digression so clients handle both transitions the
+        same way.
+        """
+        err = _check_str(session_id, "session_id", required=True)
+        if err:
+            return err
+
+        resolved, err = _resolve_session(session_id, workflows)
+        if err:
+            return err
+        session, _wf = resolved
+
+        if session.get("escalation"):
+            return error_response(
+                "session_escalated",
+                "Session is escalated. Resolve the escalation before popping.",
+                session_id=session_id,
+                escalation=session["escalation"],
+            )
+
+        own = state.own_frame(session_id)
+        if own is None:
+            # Bare session (no stack row) or already auto-popped frame. S01's
+            # auto-resume-on-complete path deletes the child entirely; by the
+            # time a client could call pop_flow on a completed digression, its
+            # sessions row is gone → _resolve_session returns session_not_found
+            # before we reach here. no_frame_to_pop fires for sessions that do
+            # exist but have no frame row (bare roots).
+            return error_response(
+                NO_FRAME_TO_POP,
+                f"session '{session_id}' has no stack frame to pop.",
+                session_id=session_id,
+            )
+
+        if own["frame_type"] == "call":
+            return error_response(
+                FRAME_TYPE_NOT_POPPABLE,
+                f"session '{session_id}' is a call-frame; call-frames are "
+                "author-resumed. Use revise_step on the parent's call-step to abandon.",
+                session_id=session_id,
+                frame_type="call",
+            )
+
+        if own["depth"] == 0:
+            # Unreachable under S01's schema (pushed frames start at depth 1),
+            # but guarded for schema evolutions that might introduce depth-0
+            # root rows. Authorized removal path for a root is delete_session.
+            return error_response(
+                BOTTOM_FRAME_POP_REJECTED,
+                f"session '{session_id}' is the bottom frame; use delete_session to remove it.",
+                session_id=session_id,
+                frame_type=own["frame_type"],
+            )
+
+        # Happy path: digression frame at depth >= 1. Delegate to the same
+        # resume helper the auto-resume-on-complete path uses so clients see
+        # byte-compatible response shapes across both transitions.
+        return _resume_parent_after_digression(session, workflows)
 
     @mcp.tool()
     @_trap_errors()
