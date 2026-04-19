@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: uv sync
-        run: uv sync
+        run: uv sync --extra panel
       - name: Bash tests
         run: bash tests/run_all.sh
       - name: pytest (no coverage)
@@ -122,6 +122,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: uv sync
-        run: uv sync
+        run: uv sync --extra panel
       - name: pytest (full with coverage + threshold)
         run: uv run pytest
