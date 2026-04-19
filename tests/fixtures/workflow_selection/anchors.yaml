@@ -20,6 +20,12 @@ anchors:
     operator_assigned_closeness: 0.5
     rationale: "Same category (analysis) with overlapping purposes (structured inquiry into a topic, written output), distinguished primarily by output shape — report vs. recommendation — and by source-review vs. tradeoff-analysis framing."
 
+  - pair_id: anchor_mid_002
+    description_A: "Implement a data transformation pipeline that reads CSV files, applies a set of cleaning rules, and emits structured JSON output."
+    description_B: "Implement a scheduled monitoring job that watches a message queue, triggers alerts on matching patterns, and records each event to a log."
+    operator_assigned_closeness: 0.5
+    rationale: "Second band-2 anchor, sited in the professional/coding category so the judge has two distinct mid-closeness reference points rather than extrapolating from one. Shared framing: 'implement X that does Y and emits Z.' Distinguished by specific purpose (batch data transform vs event-driven monitoring) and by input/output surface (CSV→JSON vs queue→logs). Most phrases apply to either with modest substitution; differentiation requires attending to the specific operation. Added after synthetic_v2 showed band-2 calibration drift — judge scored authored band-2 pairs both up (to band 3) and down (to band 1), suggesting the single-anchor mid-zone was under-specified."
+
   - pair_id: anchor_high_001
     description_A: "Draft a short blog post on a chosen topic aimed at a general audience."
     description_B: "Draft a short blog post on a chosen topic aimed at a technical audience."
