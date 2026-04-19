@@ -47,18 +47,7 @@ install.sh
 .megalos/
 
 # GSD-2 runtime state (per-project, not shared).
-# Exception: .gsd/deferred/ holds project-level design work preserved for
-# resumption (plans, context, decision pointers). Deferred design work is
-# institutional memory that would cost non-recoverable context if lost to
-# machine loss; it is tracked in git. Agent-operational state (plans being
-# actively edited, DB artifacts, rendered summaries of closed work) stays
-# gitignored. D026 (pending — blocked on MCP-bridge bind issue; see
-# .gsd/deferred/M005/upstream-issues/mcp-bridge-boolean-coercion.md)
-# will capture the distinguishing principle formally once the tool unblocks.
-# Using `.gsd/*` + `!.gsd/deferred/` because `.gsd/` as a directory-rule
-# prevents any re-inclusion of contents via `!`.
-.gsd/*
-!.gsd/deferred/
+.gsd/
 
 # Build artifacts
 *.egg-info/
