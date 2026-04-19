@@ -24,6 +24,9 @@ htmlcov/
 # Runtime DB
 server/megalos_sessions.db
 
+# Panel measurement-run outputs
+runs/
+
 # Local notes
 SCRATCH.md
 2026-04-14-agora-creations-vision-v3.md
