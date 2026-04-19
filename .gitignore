@@ -24,6 +24,10 @@ htmlcov/
 # Runtime DB
 server/megalos_sessions.db
 
+# Secrets / env files (keep out of history)
+.env
+.env.*
+
 # Panel measurement-run outputs
 runs/
 
