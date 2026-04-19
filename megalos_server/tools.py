@@ -622,6 +622,18 @@ def register_tools(mcp, workflows):
         top = state.top_frame_for(session_id)
         if top is not None:
             result["called_session"] = top["session_id"]
+        # Full-chain stack view: same array for every session in the chain so
+        # callers locate themselves by session_id match (no divergent 'frames
+        # above me' truncation). Bare session (no stack involvement) -> [].
+        own = state.own_frame(session_id)
+        if own is not None:
+            result["stack"] = state.full_stack(own["root_session_id"])
+        elif state.stack_depth(session_id) > 0:
+            # session_id is the root of a non-empty chain (no own frame, but
+            # frames sit above it).
+            result["stack"] = state.full_stack(session_id)
+        else:
+            result["stack"] = []
         return result
 
     @mcp.tool()

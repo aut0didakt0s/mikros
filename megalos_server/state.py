@@ -235,23 +235,46 @@ def update_session(session_id: str, **kwargs: object) -> None:
 
 
 def list_sessions() -> list[dict]:
-    """Return all sessions with status field (active/completed) and parent link."""
+    """Return all sessions with status field (active/completed) and parent link.
+
+    Each entry also carries stack annotations:
+      stack_depth: depth of this session's own frame (0 if session has no
+        stack row — i.e. the session is a root or a bare session).
+      under_session_id: the root session at depth 0 of the chain, or None
+        if this session is not in any stack (bare, or itself a root with no
+        frames above — roots are not 'under' anything).
+    """
     conn = db._get_conn()
     rows = conn.execute(
         "SELECT session_id, workflow_type, current_step, created_at, updated_at, "
         "parent_session_id FROM sessions"
     ).fetchall()
+    # Single round-trip for all stack rows; zip into a dict by session_id.
+    stack_rows = conn.execute(
+        "SELECT session_id, root_session_id, depth FROM session_stack"
+    ).fetchall()
+    stack_by_sid = {r[0]: (r[1], int(r[2])) for r in stack_rows}
     result = []
     for row in rows:
         status = "completed" if row[2] == COMPLETE else "active"
+        sid = row[0]
+        if sid in stack_by_sid:
+            root_sid, depth = stack_by_sid[sid]
+            stack_depth_val = depth
+            under_sid: str | None = root_sid
+        else:
+            stack_depth_val = 0
+            under_sid = None
         result.append({
-            "session_id": row[0],
+            "session_id": sid,
             "workflow_type": row[1],
             "current_step": row[2],
             "status": status,
             "created_at": row[3],
             "updated_at": row[4],
             "parent_session_id": row[5],  # None for top-level sessions
+            "stack_depth": stack_depth_val,
+            "under_session_id": under_sid,
         })
     return result
 
@@ -577,6 +600,63 @@ def _frame_row_to_dict(row: tuple) -> dict:
         "call_step_id": row[4],
         "created_at": row[5],
     }
+
+
+def full_stack(root_session_id: str) -> list[dict]:
+    """Return the full frame chain rooted at root_session_id, ordered by depth ASC.
+
+    Synthesises a depth-0 entry for the root itself (session_stack only stores
+    frames at depth >= 1 — the root is implicit). Each entry:
+      {depth, frame_type, session_id, paused_at_step, call_step_id}.
+    Root entry: frame_type='digression', paused_at_step=None, call_step_id=None
+    (root was started via start_workflow, not pushed; 'digression' is the
+    closest-honest label for a non-call non-framed origin).
+
+    For depth >= 1 entries, the session_stack.call_step_id column is overloaded:
+    it stores the parent's call-step ID when frame_type='call' and the
+    paused_at_step when frame_type='digression'. This function splits that
+    overload into two distinct keys in the returned dict so callers never have
+    to know about the column's semantic duality.
+
+    If root_session_id has no stack (bare root with no frames above), returns
+    a single-entry list (the synthesised depth-0 entry). Callers that need the
+    'no stack at all' signal should check whether the queried session is itself
+    in any chain before calling this.
+    """
+    conn = db._get_conn()
+    rows = conn.execute(
+        "SELECT session_id, root_session_id, depth, frame_type, call_step_id, created_at "
+        "FROM session_stack WHERE root_session_id = ? ORDER BY depth ASC",
+        (root_session_id,),
+    ).fetchall()
+    result: list[dict] = [
+        {
+            "depth": 0,
+            "frame_type": "digression",
+            "session_id": root_session_id,
+            "paused_at_step": None,
+            "call_step_id": None,
+        }
+    ]
+    for row in rows:
+        frame_type = row[3]
+        overloaded = row[4]
+        if frame_type == "digression":
+            paused_at_step = overloaded
+            call_step_id = None
+        else:  # 'call'
+            paused_at_step = None
+            call_step_id = overloaded
+        result.append(
+            {
+                "depth": int(row[2]),
+                "frame_type": frame_type,
+                "session_id": row[0],
+                "paused_at_step": paused_at_step,
+                "call_step_id": call_step_id,
+            }
+        )
+    return result
 
 
 def count_active() -> int:
