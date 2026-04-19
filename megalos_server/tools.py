@@ -9,7 +9,6 @@ import jsonschema
 from . import state
 from .errors import (
     ARTIFACT_MAX,
-    BOTTOM_FRAME_POP_REJECTED,
     CONTENT_MAX,
     FRAME_TYPE_NOT_POPPABLE,
     NO_FRAME_TO_POP,
@@ -1435,9 +1434,8 @@ def register_tools(mcp, workflows):
 
         Rejects call-frames (frame_type_not_poppable — call-frames are
         author-declared and author-resumed; use revise_step on the parent's
-        call-step to abandon). Rejects bottom frames at depth 0
-        (bottom_frame_pop_rejected — use delete_session to remove a root).
-        Rejects bare sessions (no_frame_to_pop — nothing to pop).
+        call-step to abandon). Rejects bare sessions and roots
+        (no_frame_to_pop — use delete_session to remove a root).
 
         Happy-path response mirrors the auto-resume-on-complete shape from
         _resume_parent_after_digression so clients handle both transitions the
@@ -1462,12 +1460,11 @@ def register_tools(mcp, workflows):
 
         own = state.own_frame(session_id)
         if own is None:
-            # Bare session (no stack row) or already auto-popped frame. S01's
-            # auto-resume-on-complete path deletes the child entirely; by the
-            # time a client could call pop_flow on a completed digression, its
-            # sessions row is gone → _resolve_session returns session_not_found
-            # before we reach here. no_frame_to_pop fires for sessions that do
-            # exist but have no frame row (bare roots).
+            # Covers bare sessions (no stack row) and roots of multi-frame
+            # chains — under the current schema, pushed frames start at
+            # depth 1, so roots have no own-frame row. If depth-0 frames
+            # later become expressible, split this into a distinct
+            # bottom_frame_pop_rejected branch.
             return error_response(
                 NO_FRAME_TO_POP,
                 f"session '{session_id}' has no stack frame to pop.",
@@ -1481,17 +1478,6 @@ def register_tools(mcp, workflows):
                 "author-resumed. Use revise_step on the parent's call-step to abandon.",
                 session_id=session_id,
                 frame_type="call",
-            )
-
-        if own["depth"] == 0:
-            # Unreachable under S01's schema (pushed frames start at depth 1),
-            # but guarded for schema evolutions that might introduce depth-0
-            # root rows. Authorized removal path for a root is delete_session.
-            return error_response(
-                BOTTOM_FRAME_POP_REJECTED,
-                f"session '{session_id}' is the bottom frame; use delete_session to remove it.",
-                session_id=session_id,
-                frame_type=own["frame_type"],
             )
 
         # Happy path: digression frame at depth >= 1. Delegate to the same

@@ -8,7 +8,6 @@ Coverage:
 - happy path: pop a depth-1 digression, resume the root at its paused step
 - nested: pop intermediate digression in a 2-deep stack, resume inner digression
 - call-frame guard: call-frames are author-resumed (frame_type_not_poppable)
-- bottom-frame guard: depth-0 stack row rejected (bottom_frame_pop_rejected)
 - bare-session / auto-popped path: no stack row returns no_frame_to_pop
 - escalated session rejected (session_escalated)
 - unknown session rejected (session_not_found)
@@ -16,7 +15,7 @@ Coverage:
 
 import pytest  # type: ignore[import-not-found]
 
-from megalos_server import db, state
+from megalos_server import state
 from megalos_server.main import WORKFLOWS
 from tests.conftest import call_tool
 
@@ -197,29 +196,6 @@ def test_pop_flow_rejects_call_frame():
     assert r["session_id"] == child_sid
     # Stack unchanged — the guard didn't mutate state.
     assert state.stack_depth(parent_sid) == 1
-
-
-# --- guard: bottom-frame (depth 0) -----------------------------------------
-
-
-def test_pop_flow_rejects_bottom_frame():
-    """Depth-0 stack row is unreachable via normal tool surface (S01 pushes
-    always land at depth >= 1). Inject one directly to exercise the guard,
-    which exists for schema evolutions that might introduce depth-0 rows.
-    """
-    outer_sid = _start_outer()
-    # Inject a depth-0 stack row for outer_sid itself.
-    with db.transaction() as conn:
-        conn.execute(
-            "INSERT INTO session_stack (session_id, root_session_id, depth, "
-            "frame_type, call_step_id, created_at) VALUES (?, ?, 0, 'digression', NULL, ?)",
-            (outer_sid, outer_sid, "2026-04-19T00:00:00+00:00"),
-        )
-
-    r = call_tool("pop_flow", {"session_id": outer_sid})
-    assert r["code"] == "bottom_frame_pop_rejected"
-    assert r["frame_type"] == "digression"
-    assert r["session_id"] == outer_sid
 
 
 # --- guard: bare session / no frame -----------------------------------------
