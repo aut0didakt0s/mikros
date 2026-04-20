@@ -1,0 +1,7 @@
+servers:
+  - name: weather
+    url: https://weather.example.com/mcp
+    transport: stdio
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN

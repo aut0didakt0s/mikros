@@ -1,0 +1,14 @@
+servers:
+  - name: weather
+    url: https://weather.example.com/mcp
+    transport: http
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN
+    timeout_default: 30.0
+  - name: search
+    url: https://search.example.com/mcp
+    transport: http
+    auth:
+      type: bearer
+      token_env: SEARCH_TOKEN

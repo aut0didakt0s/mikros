@@ -1,0 +1,6 @@
+servers:
+  - name: weather
+    transport: http
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN

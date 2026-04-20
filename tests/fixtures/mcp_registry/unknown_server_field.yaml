@@ -1,0 +1,8 @@
+servers:
+  - name: weather
+    url: https://weather.example.com/mcp
+    transport: http
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN
+    retries: 3

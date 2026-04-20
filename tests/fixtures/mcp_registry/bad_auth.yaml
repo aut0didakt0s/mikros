@@ -1,0 +1,7 @@
+servers:
+  - name: weather
+    url: https://weather.example.com/mcp
+    transport: http
+    auth:
+      type: basic
+      token_env: WEATHER_TOKEN

@@ -1,0 +1,13 @@
+servers:
+  - name: weather
+    url: https://weather.example.com/mcp
+    transport: http
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN
+  - name: weather
+    url: https://weather2.example.com/mcp
+    transport: http
+    auth:
+      type: bearer
+      token_env: WEATHER_TOKEN_2
