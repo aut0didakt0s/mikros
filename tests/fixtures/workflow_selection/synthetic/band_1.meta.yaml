@@ -1,0 +1,9 @@
+authoring_model: groq/llama-3.3-70b-versatile
+groq_model_id_at_runtime: llama-3.3-70b-versatile
+generation_date: '2026-04-19T22:47:24.040354+00:00'
+prompt_template_version: generator-v2-groq
+generator_seed: 0
+run_id: synthetic_v2
+n_authored: 20
+n_parse_failures: 0
+panel_record_path: runs/synthetic_v2/records/20260419T224724040654Z.jsonl

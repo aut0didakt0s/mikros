@@ -1,0 +1,312 @@
+pairs:
+- pair_id: band3-000
+  band: 3
+  description_A: The workflow involves daily team meetings at 10am, followed by individual
+    task assignments and progress tracking using Trello, with a focus on open communication
+    and a single point of contact for escalations, led by a team lead who oversees
+    the entire process and ensures that all tasks are completed efficiently.
+  description_B: The workflow involves daily team meetings at 10am, followed by individual
+    task assignments and progress tracking using Trello, with a focus on open communication
+    and a single point of contact for escalations, led by a team lead who oversees
+    the entire process and ensures that all tasks are completed effectively.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: dfcf47c96be646be913a3e251ca626c1
+- pair_id: band3-001
+  band: 3
+  description_A: The team leader oversees daily tasks and ensures all members are
+    aware of their responsibilities. Team meetings are held weekly to discuss progress
+    and address any issues that have arisen. All team members are required to submit
+    status reports on Fridays. The project timeline is regularly reviewed and updated
+    to reflect any changes. A shared online calendar is used to schedule meetings
+    and deadlines. The team leader is responsible for making final decisions.
+  description_B: The team leader oversees daily tasks and ensures all members are
+    aware of their responsibilities. Team meetings are held weekly to discuss progress
+    and address any issues that have arisen. All team members are required to submit
+    status reports on Thursdays. The project timeline is regularly reviewed and updated
+    to reflect any changes. A shared online calendar is used to schedule meetings
+    and deadlines. The team leader is responsible for making final decisions.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 9690d5998cb64a049e5bb79c385c8c44
+- pair_id: band3-002
+  band: 3
+  description_A: The workflow involves daily meetings with the team to review progress
+    and discuss ongoing projects, led by a senior manager who oversees the entire
+    operation and makes key decisions. Team members are expected to provide regular
+    updates and insights, and collaborate closely with one another to achieve shared
+    goals.
+  description_B: The workflow involves daily meetings with the team to review progress
+    and discuss ongoing projects, led by a senior manager who oversees the entire
+    operation and makes key decisions. Team members are expected to provide regular
+    updates and insights, and collaborate very closely with one another to achieve
+    shared goals.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 24514277c48c4147b0bd6afd45a651c0
+- pair_id: band3-003
+  band: 3
+  description_A: The workflow involves daily team meetings at 9am, reviewing current
+    projects and assigning new tasks to team members. Team leaders oversee the progress
+    and provide feedback to ensure all members are on track. The team works closely
+    together, sharing ideas and expertise to deliver high-quality results.
+  description_B: The workflow involves daily team meetings at 9am, reviewing current
+    projects and assigning new tasks to team members. Team leaders oversee the progress
+    and provide feedback to ensure all members are on track. The team works closely
+    together, sharing ideas and expertise to deliver high-quality results quickly.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 91e69b2676434c4287580607b0b18df4
+- pair_id: band3-004
+  band: 3
+  description_A: The workflow entails a series of interconnected tasks that are meticulously
+    planned and executed with a focus on precision, utilizing standardized tools and
+    adhering to strict guidelines to ensure high-quality outcomes. It involves regular
+    team meetings and progress updates, fostering an environment of collaboration
+    and open communication. The workflow is designed to be flexible, allowing for
+    adjustments as needed, while maintaining a core structure that ensures consistency
+    and reliability.
+  description_B: The workflow entails a series of interconnected tasks that are meticulously
+    planned and executed with a focus on precision, utilizing standardized tools and
+    adhering to strict guidelines to ensure high-quality outcomes. It involves regular
+    team meetings and progress updates, fostering an environment of collaboration
+    and open communication. The workflow is designed to be rigid, allowing for adjustments
+    as needed, while maintaining a core structure that ensures consistency and reliability.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 69ce843c16e64a80a78a538fea80b78d
+- pair_id: band3-005
+  band: 3
+  description_A: The workflow involves daily team meetings, iterative coding, and
+    continuous testing, with an emphasis on collaboration and open communication among
+    team members, led by a single experienced project manager.
+  description_B: The workflow involves daily team meetings, iterative coding, and
+    continuous testing, with an emphasis on collaboration and open communication among
+    team members, led by a single inexperienced project manager.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 78e85014a0d64d37af68cece025c38e0
+- pair_id: band3-006
+  band: 3
+  description_A: The workflow involves a daily stand-up meeting at 9:00 AM, led by
+    the team lead, where team members share their progress and discuss ongoing projects.
+    The team follows an agile methodology, focusing on iterative development and continuous
+    improvement. They use Jira for project management and track their velocity through
+    burn-down charts. The team is self-organizing, with members taking ownership of
+    their tasks and collaborating closely to deliver high-quality results. The team
+    lead is responsible for removing impediments and ensuring the team has the necessary
+    resources.
+  description_B: The workflow involves a daily stand-up meeting at 9:00 AM, led by
+    the team lead, where team members share their progress and discuss ongoing projects.
+    The team follows an agile methodology, focusing on iterative development and continuous
+    improvement. They use Jira for project management and track their velocity through
+    burn-down charts. The team is self-organizing, with members taking ownership of
+    their tasks and collaborating closely to deliver high-quality results. The team
+    lead is responsible for removing impediments and ensuring the team has the necessary
+    resources, quickly.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 512a30ec1e7c4856a52aa24abc00ec07
+- pair_id: band3-007
+  band: 3
+  description_A: The workflow involves daily team meetings, open communication, and
+    collaborative problem-solving, with a strong emphasis on building trust and fostering
+    a sense of unity among team members, led by a designated leader
+  description_B: The workflow involves daily team meetings, open communication, and
+    collaborative problem-solving, with a strong emphasis on building trust and fostering
+    a sense of unity among team members, led by an appointed leader
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: cbc43db5e4f540348b30d0e99defdc21
+- pair_id: band3-008
+  band: 3
+  description_A: The workflow involves daily team meetings, weekly progress reviews,
+    and monthly goal assessments, with a strong emphasis on open communication, active
+    listening, and adaptability, led by a experienced leader who makes the final decision
+  description_B: The workflow involves daily team meetings, weekly progress reviews,
+    and monthly goal assessments, with a strong emphasis on open communication, active
+    listening, and adaptability, led by a experienced leader who makes the final decisions
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 57152aa439ea46d3bdf734c5f731445e
+- pair_id: band3-009
+  band: 3
+  description_A: The workflow begins with data ingestion, followed by cleansing and
+    transformation, and then advanced analytics are applied, yielding predictions
+    which inform decision-making processes that drive business outcomes, ultimately
+    leading to increased revenue and improved customer satisfaction through enhanced
+    personalization using machine learning algorithms.
+  description_B: The workflow begins with data ingestion, followed by cleansing and
+    transformation, and then advanced analytics are applied, yielding predictions
+    which inform decision-making processes that drive business outcomes, ultimately
+    leading to increased revenue and improved customer satisfaction through enhanced
+    personalization using deep learning algorithms.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: d3b590ced01b4d1ebe61479e9c95e2f5
+- pair_id: band3-010
+  band: 3
+  description_A: The new project management workflow begins with a daily team meeting,
+    followed by individual tasks and progress tracking, and ends with a weekly review
+    of goals and objectives, led by the team lead with the door closed.
+  description_B: The new project management workflow begins with a daily team meeting,
+    followed by individual tasks and progress tracking, and ends with a weekly review
+    of goals and objectives, led by the team lead with the door open.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: dca37083ed214e73b4cabc4df00d8778
+- pair_id: band3-011
+  band: 3
+  description_A: The workflow involves daily team meetings, weekly progress updates,
+    and monthly evaluations to ensure seamless collaboration and high-quality output,
+    with a focus on innovation and employee satisfaction, using digital tools for
+    communication and task management, and emphasizing transparency and open dialogue
+    among team members, while also incorporating flexible working hours and employee
+    wellness programs, led by a single team lead who oversees the entire process and
+    makes key decisions, with an emphasis on continuous improvement and adaptability,
+    and the team lead is available to provide guidance and support, and the team has
+    a large budget for resources and training, and the team is co-located in a large
+    office space, with a male team lead.
+  description_B: The workflow involves daily team meetings, weekly progress updates,
+    and monthly evaluations to ensure seamless collaboration and high-quality output,
+    with a focus on innovation and employee satisfaction, using digital tools for
+    communication and task management, and emphasizing transparency and open dialogue
+    among team members, while also incorporating flexible working hours and employee
+    wellness programs, led by a single team lead who oversees the entire process and
+    makes key decisions, with an emphasis on continuous improvement and adaptability,
+    and the team lead is available to provide guidance and support, and the team has
+    a large budget for resources and training, and the team is co-located in a large
+    office space, with a female team lead.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 908f0b5852604576a136c377cff0f0bb
+- pair_id: band3-012
+  band: 3
+  description_A: The workflow involves a series of intricate steps, including data
+    collection, analysis, and reporting, with a strong emphasis on attention to detail
+    and a focus on delivering high-quality results quickly, using automated tools.
+    The team works closely together, sharing information and expertise to ensure seamless
+    execution.
+  description_B: The workflow involves a series of intricate steps, including data
+    collection, analysis, and reporting, with a strong emphasis on attention to detail
+    and a focus on delivering high-quality results quickly, using manual tools. The
+    team works closely together, sharing information and expertise to ensure seamless
+    execution.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: ec0745bfa456435eafb117c5dac10308
+- pair_id: band3-013
+  band: 3
+  description_A: The team collaborates closely, sharing ideas and expertise to achieve
+    a unified goal, with open communication and active listening being essential components,
+    and all members feeling fully invested in the project's success, often socializing
+    together outside of work, and considering themselves a tight-knit family, which
+    is facilitated by their collocated workspace.
+  description_B: The team collaborates closely, sharing ideas and expertise to achieve
+    a unified goal, with open communication and active listening being essential components,
+    and all members feeling fully invested in the project's success, often socializing
+    together outside of work, and considering themselves a tight-knit family, which
+    is facilitated by their distributed workspace.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: b331a371040549df8ddbdf0b7916c18b
+- pair_id: band3-014
+  band: 3
+  description_A: The workflow involves a series of interconnected tasks that are all
+    performed in a sequential manner, with each task building on the previous one,
+    and it is typically managed by a single team leader who oversees the entire process
+    and ensures its timely completion.
+  description_B: The workflow involves a series of interconnected tasks that are all
+    performed in a sequential manner, with each task building on the previous one,
+    and it is typically managed by a single team leader who oversees the entire process
+    and ensures its timely and efficient completion.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 2388b1b15a0941949ffc4d2d491ac94a
+- pair_id: band3-015
+  band: 3
+  description_A: The workflow involves daily team meetings to discuss project updates,
+    followed by individual task assignments and regular progress checks, with an emphasis
+    on transparency and open communication among team members, who are all located
+    in the same office building.
+  description_B: The workflow involves daily team meetings to discuss project updates,
+    followed by individual task assignments and regular progress checks, with an emphasis
+    on transparency and open communication among team members, who are all located
+    in the same office.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 7f917a5746a548f7b8fa5fae70641cfa
+- pair_id: band3-016
+  band: 3
+  description_A: The process involves a series of meticulous steps, each one building
+    on the previous, to create a seamless and efficient workflow. It starts with data
+    collection, followed by data analysis, and then the formulation of a strategic
+    plan. The plan is then implemented, and progress is closely monitored. Adjustments
+    are made as needed to ensure optimal results. The process is led by a team of
+    experienced professionals who work collaboratively. They prioritize tasks and
+    make decisions based on thorough research and expert judgment, always considering
+    the long-term impact of their actions.
+  description_B: The process involves a series of meticulous steps, each one building
+    on the previous, to create a seamless and efficient workflow. It starts with data
+    collection, followed by data analysis, and then the formulation of a strategic
+    plan. The plan is then implemented, and progress is closely monitored. Adjustments
+    are made as needed to ensure optimal results. The process is led by a team of
+    experienced professionals who work collaboratively. They prioritize tasks and
+    make decisions based on thorough research and expert judgment, always considering
+    the short-term impact of their actions.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: a4dfc89570984c34ae50bd64afba0e96
+- pair_id: band3-017
+  band: 3
+  description_A: The workflow entails a high degree of repetition, with each task
+    being meticulously replicated to ensure uniformity and consistency throughout
+    the process, ultimately yielding a nearly identical outcome every time, led by
+    a single team lead.
+  description_B: The workflow entails a high degree of repetition, with each task
+    being meticulously replicated to ensure uniformity and consistency throughout
+    the process, ultimately yielding a nearly identical outcome every time, led by
+    a single team leader.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 1bdcbd8023e1447bb30b034211b5bee4
+- pair_id: band3-018
+  band: 3
+  description_A: The team works closely together, often meeting in person to discuss
+    project details and share ideas freely. They prioritize collaboration and open
+    communication, which enables them to align their goals and work towards a common
+    objective efficiently. Their workflow is highly integrated, with each member contributing
+    their expertise to create a cohesive final product. They also make time for socializing
+    and team-building activities, fostering a sense of camaraderie and shared purpose.
+    The team uses digital tools to track progress and stay organized.
+  description_B: The team works closely together, often meeting in person to discuss
+    project details and share ideas freely. They prioritize collaboration and open
+    communication, which enables them to align their goals and work towards a common
+    objective efficiently. Their workflow is highly integrated, with each member contributing
+    their expertise to create a cohesive final product. They also make time for socializing
+    and team-building activities, fostering a sense of camaraderie and shared purpose.
+    The team uses digital tools to track progress and stays organized.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: a5ced6ef839f42d6915c8ac973164ed4
+- pair_id: band3-019
+  band: 3
+  description_A: The workflow involves a daily meeting at 9am to discuss ongoing projects
+    and assign tasks to team members. Team leads are responsible for monitoring progress
+    and reporting to upper management. All team members are expected to collaborate
+    and contribute to the project's success. The team uses a project management tool
+    to track progress and deadlines. The workflow is iterative, with continuous improvement
+    and adjustments as needed to ensure the team is working efficiently. The team
+    is highly collaborative and dynamic, with a focus on open communication and mutual
+    respect.
+  description_B: The workflow involves a daily meeting at 9am to discuss ongoing projects
+    and assign tasks to team members. Team leads are responsible for monitoring progress
+    and reporting to upper management. All team members are expected to collaborate
+    and contribute to the project's success. The team uses a project management tool
+    to track progress and deadlines. The workflow is iterative, with continuous improvement
+    and adjustments as needed to ensure the team is working efficiently. The team
+    is highly collaborative and static, with a focus on open communication and mutual
+    respect.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: aa47eb68c82643cd9e0786d91f274ee1

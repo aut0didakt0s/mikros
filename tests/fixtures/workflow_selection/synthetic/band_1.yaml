@@ -1,0 +1,307 @@
+pairs:
+- pair_id: band1-000
+  band: 1
+  description_A: The astronomical data processing workflow involves collecting and
+    analyzing large datasets from telescope observations to identify patterns in star
+    formation. It requires data ingestion, filtering, and machine learning-based classification
+    to produce visualizations of celestial bodies. The output is a set of images and
+    graphs that can be used to understand the behavior of galaxies.
+  description_B: The recipe management workflow is designed for food bloggers to streamline
+    their content creation process. It includes text editing, ingredient parsing,
+    and nutritional information calculation to generate printable recipes and meal
+    planning schedules. The primary output is a formatted document with cooking instructions
+    and nutritional facts that can be shared on social media or published in cookbooks.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 4f5f9638342e4a2888a3d230c1b05ee7
+- pair_id: band1-001
+  band: 1
+  description_A: In the agricultural domain, a low-closeness workflow is used for
+    crop rotation planning, where the primary operation is data collection from soil
+    sensors and weather forecasts, resulting in a comprehensive report on optimal
+    planting schedules. This workflow involves distinct steps such as data ingestion,
+    trend analysis, and visualization, with the final output being a printable PDF
+    report.
+  description_B: For digital art preservation, a low-closeness workflow is employed
+    for artifact cataloging, involving metadata tagging, image compression, and encryption,
+    with the final product being a secured online repository. The key operations in
+    this workflow include image scanning, classification, and storage, all of which
+    occur within a web-based platform.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 4d96d40857bf4f77bfd3643f266732fd
+- pair_id: band1-002
+  band: 1
+  description_A: This workflow is designed for astronomical research, focusing on
+    identifying distant galaxies. It involves data ingestion from telescope sensors,
+    followed by image processing and pattern recognition to detect galaxy formations.
+    The output is a catalog of galaxy coordinates and characteristics.
+  description_B: This workflow is tailored for culinary recipe development, aiming
+    to create innovative dessert recipes. It entails text analysis of food blogs,
+    ingredient substitution, and nutritional calculation to generate unique and balanced
+    dessert recipes. The output is a cookbook with detailed recipes and cooking instructions.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 3f7e02259d0143f0870e2012b894fd01
+- pair_id: band1-003
+  band: 1
+  description_A: In the agriculture domain, the low-closeness workflow for crop monitoring
+    involves using satellite images to detect early signs of disease or pests, then
+    generating a report highlighting affected areas. This report is used by farmers
+    to target their intervention efforts, minimizing waste and reducing the environmental
+    impact of farming practices.
+  description_B: For the financial sector, a low-closeness workflow in risk assessment
+    involves compiling customer credit history from various sources, applying machine
+    learning algorithms to predict default probabilities, and producing a list of
+    high-risk clients. This list helps financial institutions to adjust their lending
+    strategies and mitigate potential losses.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 3f488bb7ae0043c3b3ee21d6395b690f
+- pair_id: band1-004
+  band: 1
+  description_A: The data journalism workflow involves collecting and analyzing large
+    datasets to identify trends and patterns, resulting in interactive visualizations
+    and published news articles. It requires data scraping, cleaning, and processing,
+    often using programming languages like Python and R, to produce insightful stories
+    and graphics that inform the public.
+  description_B: The furniture restoration workflow focuses on rejuvenating antique
+    pieces, transforming them into functional items for everyday use. This process
+    entails manual operations like sanding, staining, and polishing, aiming to preserve
+    the original characteristics while ensuring durability and aesthetic appeal, ultimately
+    yielding unique, refurbished pieces for residential or commercial spaces.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: b30816fdb5c740f290be352fa5371438
+- pair_id: band1-005
+  band: 1
+  description_A: The meteorological data processing workflow involves collecting atmospheric
+    readings from various weather stations, applying calibration adjustments, and
+    generating daily climate forecast reports for public dissemination. This entails
+    processing large datasets, executing statistical models, and producing graphical
+    visualizations of temperature and precipitation patterns.
+  description_B: The digital artwork restoration workflow focuses on revitalizing
+    damaged paintings by applying advanced image filtering techniques, manually retouching
+    corrupted areas, and outputting high-resolution prints for exhibition purposes.
+    This requires meticulous attention to color palette preservation, texture reconstruction,
+    and brushstroke simulation to maintain the original artistic intent.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: da5cd3442ffe47f8be5dc35135ac9a0b
+- pair_id: band1-006
+  band: 1
+  description_A: The astronomy data workflow involves collecting and processing large
+    sets of stellar observations to produce a catalog of celestial objects with their
+    respective spectral classifications. This process entails applying algorithms
+    for noise reduction, spectral analysis, and pattern recognition to the collected
+    data, which is then used to train machine learning models for prediction and classification
+    tasks. The output is a comprehensive database that astronomers can use to understand
+    the composition and behavior of stars and other celestial entities.
+  description_B: The culinary recipe management workflow is designed for food bloggers
+    and professional chefs to organize, create, and share recipes with their audiences.
+    This process includes operations such as recipe ingestion from various sources,
+    nutrient analysis, meal planning, and generation of shopping lists. The final
+    output is a user-friendly web interface or mobile application where users can
+    browse, filter, and cook recipes, complete with step-by-step cooking instructions
+    and high-quality food images.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 061c75dd86a3406c9e404fa9336ada4d
+- pair_id: band1-007
+  band: 1
+  description_A: In the agricultural domain, a farmer's daily workflow involves monitoring
+    crop health through satellite imaging and soil analysis. The output is a weekly
+    report detailing pest sightings and fertilizer requirements, generated through
+    a series of image processing and statistical operations. The goal is to optimize
+    crop yields while minimizing the use of pesticides and fertilizers.
+  description_B: In the financial sector, a trader's workflow centers on analyzing
+    market trends using machine learning algorithms and technical indicators. The
+    output is a daily portfolio rebalancing strategy, created through a combination
+    of data mining and predictive modeling operations. The objective is to maximize
+    investment returns while minimizing risk exposure.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 2e64326eff804090b4372fa74f4f5ed8
+- pair_id: band1-008
+  band: 1
+  description_A: This workflow is designed for data analysis in the field of environmental
+    science, focusing on climate change research. The primary operation involves data
+    mining of temperature and precipitation patterns from historical records, resulting
+    in the output of predictive models for future climate trends. The workflow utilizes
+    tools such as geographic information systems (GIS) and statistical software to
+    analyze and visualize the data.
+  description_B: This workflow is tailored for digital content creation in the domain
+    of graphic design, with the main goal of producing visually appealing marketing
+    materials. The key operation involves graphic editing and manipulation of images
+    and text, leading to the output of print-ready advertisements and social media
+    graphics. The workflow incorporates design software and collaboration tools to
+    facilitate teamwork and feedback among designers and clients.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 7fc45fc3adb44f82ba354f05135d0c37
+- pair_id: band1-009
+  band: 1
+  description_A: In the agricultural domain, Workflow A is designed to generate a
+    yearly crop rotation plan. It takes soil quality reports, weather forecasts, and
+    crop yield data as inputs, applies spatial analysis and machine learning algorithms
+    to predict optimal crop placement, and produces a visual map of the planned crop
+    rotation. The workflow involves data ingestion, data processing, and data visualization
+    operations.
+  description_B: In the financial domain, Workflow B aims to produce a quarterly investment
+    portfolio report. It takes stock market trends, economic indicators, and investment
+    strategy documents as inputs, applies risk assessment and portfolio optimization
+    techniques to evaluate investment performance, and generates a detailed report
+    of portfolio returns and recommendations. The workflow involves data aggregation,
+    risk modeling, and report generation operations.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 329658cd8a6f4c40a9a5389b93cab68b
+- pair_id: band1-010
+  band: 1
+  description_A: The astronomy data processing workflow involves collecting and analyzing
+    radio signals from distant galaxies to generate 3D star maps. It requires applying
+    filters to remove noise, transforming signals into spectral data, and visualizing
+    the results to identify patterns and trends. The output is a set of interactive,
+    web-based visualizations that allow researchers to explore the galaxy structures
+    in detail.
+  description_B: The recipe book digitization workflow is designed to convert handwritten
+    cookbooks into digital formats. It entails scanning and OCR processing of recipe
+    pages, followed by text normalization, entity extraction, and data storage in
+    a relational database. The final output is a searchable, online cookbook with
+    tagged ingredients, cooking methods, and meal categories, making it easy for home
+    cooks to find and share recipes.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: f21f7d5288594343aba65227775a0dde
+- pair_id: band1-011
+  band: 1
+  description_A: In the agricultural domain, a low-closeness workflow for crop monitoring
+    involves collecting satellite imagery and sensor data to predict crop yields.
+    The workflow's primary operation is data analytics, and its output is a report
+    on crop health and growth patterns.
+  description_B: In the financial services domain, a low-closeness workflow for customer
+    onboarding involves processing loan applications and verifying identity documents.
+    The workflow's primary operation is document validation, and its output is a approved
+    or rejected loan application status.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: d0771bc21abe44df864ed651c4e853a3
+- pair_id: band1-012
+  band: 1
+  description_A: This workflow is designed for astronomical data processing, generating
+    visualizations of galaxy distributions from large datasets. It involves operations
+    such as data cleaning, filtering, and applying machine learning algorithms to
+    identify patterns in star formations, ultimately producing interactive 3D maps.
+  description_B: The workflow focuses on financial transaction analysis, aiming to
+    detect fraudulent activities by monitoring account behaviors and transaction patterns.
+    It performs tasks like data normalization, clustering, and regression analysis
+    to predict high-risk transactions, resulting in detailed risk assessment reports
+    for banking institutions.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 7f59a308b89b4ef8951453943d74aadf
+- pair_id: band1-013
+  band: 1
+  description_A: This workflow is designed for astronomical data analysis, focusing
+    on identifying patterns in star formation. It takes in large datasets from telescope
+    observations, applies filtering and normalization operations, and produces visualizations
+    of galaxy distributions. The primary output is a set of 3D models of celestial
+    structures.
+  description_B: This workflow is tailored for financial forecasting, aiming to predict
+    stock market trends. It ingests historical trading data, performs statistical
+    modeling and regression analysis, and generates predictive reports on market fluctuations.
+    The main outcome is a set of risk assessment charts for investment portfolios.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: a96b45807c6d4fff8210a1006dd96d21
+- pair_id: band1-014
+  band: 1
+  description_A: In the field of environmental monitoring, a workflow is designed
+    to track wildlife population trends. The process involves collecting data from
+    camera traps, sorting and filtering the images, and then using machine learning
+    algorithms to identify and count the species present. The output is a monthly
+    report detailing the population sizes and migration patterns of key species in
+    the area.
+  description_B: For a financial services company, a workflow is implemented to generate
+    personalized investment portfolios for clients. The workflow entails gathering
+    client information, assessing risk tolerance, and using statistical models to
+    optimize investment allocations. The resulting output is a customized investment
+    plan, complete with asset allocations and projected returns, tailored to each
+    client's financial goals and preferences.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 0eb0e836bb2c43359ec8398f5b8eecdd
+- pair_id: band1-015
+  band: 1
+  description_A: In the environmental monitoring domain, scientists collect water
+    samples from rivers and process them to generate maps of pollution levels. This
+    workflow involves fieldwork, laboratory testing, and geospatial analysis to produce
+    visual representations of water quality.
+  description_B: In the software development domain, programmers design and implement
+    algorithms to generate musical compositions. This workflow involves coding, audio
+    processing, and music theory application to produce original music files.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 5ce1529c59414c0f9ab400a718d42e47
+- pair_id: band1-016
+  band: 1
+  description_A: The botanical research workflow involves collecting and analyzing
+    plant specimens to identify new species. It requires operations such as DNA sequencing,
+    microscopic examination, and taxonomic classification, ultimately producing a
+    comprehensive report on the discovered species' characteristics and habitats.
+  description_B: The financial auditing workflow entails examining a company's financial
+    statements to ensure compliance with regulatory standards. It involves operations
+    like data mining, risk assessment, and compliance checking, resulting in a detailed
+    audit report highlighting any discrepancies and providing recommendations for
+    improvement.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 5f15f334988b48c6a8e7600d7c8df0d7
+- pair_id: band1-017
+  band: 1
+  description_A: Workflow A pertains to astronomical data processing, where the primary
+    operation involves applying complex algorithms to filter telescope images and
+    detect faint celestial objects. The output is a set of coordinated galaxy positions,
+    which are then stored in a database for future research. The workflow relies on
+    specialized software, such as Python libraries and machine learning tools, to
+    analyze the vast amount of data collected from observations.
+  description_B: Workflow B is a content creation process focused on developing educational
+    materials for elementary school students, with the main task being the design
+    and layout of interactive textbooks. The output is a visually engaging PDF document
+    that includes illustrations, diagrams, and simple exercises. The workflow utilizes
+    graphic design software and educational content management systems to produce
+    the final product, which is then reviewed by teachers and curriculum experts.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: 74cad22727c440cdb80f96b6346eba5a
+- pair_id: band1-018
+  band: 1
+  description_A: In the agricultural domain, workflow A is designed to manage crop
+    rotation schedules, generating a yearly plan for farmers to maximize yield and
+    minimize soil depletion. The workflow involves data ingestion from weather forecasts
+    and soil analysis reports, followed by a series of mathematical operations to
+    predict optimal planting dates and crop combinations.
+  description_B: In the digital graphics domain, workflow B focuses on creating interactive
+    3D models for video game development, producing a fully rigged character model
+    with realistic textures and animations. The workflow entails importing 3D mesh
+    data, applying physics simulations, and utilizing machine learning algorithms
+    to generate natural movement patterns and detailed environmental effects.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: cdecdff702ed4f6b9acd5b919b879b5d
+- pair_id: band1-019
+  band: 1
+  description_A: A data analysis workflow for environmental monitoring, designed to
+    track water pollution levels in rivers. It involves collecting and processing
+    sensor data from various stations, applying filters to remove noise, and generating
+    visualizations to help researchers identify trends and patterns. The output is
+    a comprehensive report on water quality, which is then used to inform policy decisions.
+  description_B: A digital media production workflow for creating 3D animated short
+    films. It entails storyboarding, character modeling, texture rendering, and audio
+    composition, with the final output being a rendered video file. This workflow
+    requires a range of software tools and skills, from graphic design to sound engineering,
+    and is typically used in the entertainment industry to produce engaging and immersive
+    content.
+  authoring_model: groq/llama-3.3-70b-versatile
+  prompt_template_version: generator-v2-groq
+  raw_response_id: dd1d7359f162433a89fface2a9c2479d
