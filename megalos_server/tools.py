@@ -16,6 +16,7 @@ from .errors import (
     SUB_WORKFLOW_PENDING,
     error_response,
 )
+from .mcp_registry import Registry
 from .state import COMPLETE as _COMPLETE
 
 _DEFAULT_MAX_RETRIES = 3
@@ -142,6 +143,99 @@ def _apply_skip_loop(
         skipped_set.add(next_step_id)
         next_step_id = _COMPLETE if idx == len(steps) - 1 else steps[idx + 1]["id"]
     return next_step_id, skipped
+
+
+def _auto_execute_mcp_steps(
+    next_step_id: str,
+    wf: dict,
+    session_id: str,
+    step_data: dict,
+    registry: Registry | None,
+) -> tuple[str, dict | None]:
+    """Execute any ``mcp_tool_call`` step(s) at/after ``next_step_id`` in-line.
+
+    Loops while the step pointed at by ``next_step_id`` has ``action:
+    mcp_tool_call``: resolves args, calls the MCP client, writes the
+    envelope to ``step_data``, bumps that step's visit count, and advances
+    to whichever step comes next. Exits as soon as the pointer lands on a
+    non-mcp step (which the client must then submit normally) or
+    ``_COMPLETE``.
+
+    Cascade handling: if a ref-path in the args tree points at a skipped
+    predecessor, ``_SkippedPredecessor`` bubbles out of
+    ``execute_mcp_tool_call_step``. We map this to an
+    ``skipped_predecessor_reference`` error envelope returned as the second
+    tuple element (mirroring the handling in submit_step); the caller is
+    responsible for any parent-escalation wrapping. On this path,
+    ``step_data`` is left unchanged for the offending step and the loop
+    stops.
+
+    Returns ``(final_step_id, None)`` on success, or
+    ``(next_step_id_at_failure, error_envelope_dict)`` on cascade.
+    """
+    # Local import to avoid cycle at module load time.
+    from .mcp_executor import execute_mcp_tool_call_step
+
+    while next_step_id != _COMPLETE:
+        idx, step = _find_step(wf, next_step_id)
+        if step is None or step.get("action") != "mcp_tool_call":
+            return next_step_id, None
+
+        # Snapshot skipped_set BEFORE executing this step so resolve_args
+        # sees the same cascade semantics as a precondition evaluated at
+        # the same point.
+        skipped_set = set(_compute_skipped_steps(wf, step_data))
+
+        try:
+            envelope = execute_mcp_tool_call_step(
+                step,
+                step_data,
+                skipped_set,
+                registry,
+                workflow_name=wf.get("name", "<unknown>"),
+            )
+        except _SkippedPredecessor as e:
+            err = error_response(
+                "skipped_predecessor_reference",
+                f"Step '{e.referencing_step_id}' precondition references skipped predecessor '{e.sid}'",
+                session_id=session_id,
+                step_id=next_step_id,
+                referenced_step=e.sid,
+                referencing_field="args",
+            )
+            return next_step_id, err
+
+        step_data[step["id"]] = json.dumps(envelope)
+        state.increment_visit(session_id, step["id"])
+
+        # Advance: branches-default honoured (v1 doesn't pick branches from the
+        # envelope; workflow authors must use a follow-up LLM step if they want
+        # conditional routing off the envelope). Linear otherwise.
+        if step.get("branches"):
+            next_step_id = step.get("default_branch", _COMPLETE)
+        else:
+            is_last = idx == len(wf["steps"]) - 1
+            next_step_id = _COMPLETE if is_last else wf["steps"][idx + 1]["id"]
+
+        # Re-apply skip loop so precondition-based skips on downstream steps
+        # see the envelope we just wrote. Propagated _SkippedPredecessor maps
+        # to the same cascade envelope as the args-path failure above.
+        try:
+            next_step_id, _ = _apply_skip_loop(
+                next_step_id, wf, step_data, force_branched=False
+            )
+        except _SkippedPredecessor as e:
+            err = error_response(
+                "skipped_predecessor_reference",
+                f"Step '{e.referencing_step_id}' precondition references skipped predecessor '{e.sid}'",
+                session_id=session_id,
+                step_id=next_step_id,
+                referenced_step=e.sid,
+                referencing_field="precondition",
+            )
+            return next_step_id, err
+
+    return next_step_id, None
 
 
 def _check_str(value: object, name: str, *, required: bool = False) -> dict | None:
@@ -279,7 +373,12 @@ def _evaluate_guardrails(guardrails, content, session, step_id):
 
 
 def _advance_parent(
-    parent_sid: str, parent_wf: dict, call_step: dict, idx: int, step_data: dict
+    parent_sid: str,
+    parent_wf: dict,
+    call_step: dict,
+    idx: int,
+    step_data: dict,
+    registry: Registry | None = None,
 ) -> dict:
     """Advance parent session after child-artifact propagation.
 
@@ -307,6 +406,14 @@ def _advance_parent(
             referenced_step=e.sid,
             referencing_field="precondition",
         )
+
+    # Auto-execute mcp_tool_call steps at the parent's new pointer.
+    next_step_id, cascade_err = _auto_execute_mcp_steps(
+        next_step_id, parent_wf, parent_sid, step_data, registry
+    )
+    if cascade_err is not None:
+        state.update_session(parent_sid, current_step=next_step_id, step_data=step_data)
+        return cascade_err
 
     if next_step_id != _COMPLETE:
         state.increment_visit(parent_sid, next_step_id)
@@ -378,7 +485,9 @@ def _wrap_child_failure_into_parent_escalation(
     )
 
 
-def _resume_parent_after_digression(child_session: dict, workflows: dict) -> dict:
+def _resume_parent_after_digression(
+    child_session: dict, workflows: dict, registry: Registry | None = None
+) -> dict:
     """Digression-frame completion: pop frame, delete child, hand next-step directive
     back to the outer session. No artifact propagation (digression-frames have no
     data contract — the push_flow call is the entire handoff). Outer session
@@ -432,7 +541,10 @@ def _resume_parent_after_digression(child_session: dict, workflows: dict) -> dic
 
 
 def _auto_resume_on_top_frame_complete(
-    child_session: dict, child_wf: dict, workflows: dict
+    child_session: dict,
+    child_wf: dict,
+    workflows: dict,
+    registry: Registry | None = None,
 ) -> dict:
     """Frame-type dispatch on child completion. Reads the child's own frame row to
     decide: 'call' → propagate artifact to parent via M004 semantics; 'digression'
@@ -442,11 +554,16 @@ def _auto_resume_on_top_frame_complete(
     own = state.own_frame(child_session["session_id"])
     frame_type = own["frame_type"] if own else "call"  # defensive default matches M004
     if frame_type == "digression":
-        return _resume_parent_after_digression(child_session, workflows)
-    return _propagate_to_parent(child_session, child_wf, workflows)
+        return _resume_parent_after_digression(child_session, workflows, registry=registry)
+    return _propagate_to_parent(child_session, child_wf, workflows, registry=registry)
 
 
-def _propagate_to_parent(child_session: dict, child_wf: dict, workflows: dict) -> dict:
+def _propagate_to_parent(
+    child_session: dict,
+    child_wf: dict,
+    workflows: dict,
+    registry: Registry | None = None,
+) -> dict:
     """Bridge: child completed → propagate final artifact to parent, advance parent.
 
     On parent output_schema failure, escalates the parent and retains the child
@@ -505,11 +622,21 @@ def _propagate_to_parent(child_session: dict, child_wf: dict, workflows: dict) -
     state.delete_session(child_sid)
     state.set_called_session(parent_sid, None)
 
-    return _advance_parent(parent_sid, parent_wf, call_step, idx, parent_step_data)
+    return _advance_parent(
+        parent_sid, parent_wf, call_step, idx, parent_step_data, registry=registry
+    )
 
 
-def register_tools(mcp, workflows):
-    """Register workflow tools on the FastMCP app."""
+def register_tools(mcp, workflows, registry: Registry | None = None):
+    """Register workflow tools on the FastMCP app.
+
+    ``registry`` is the loaded ``Registry`` of external MCP servers used by
+    ``mcp_tool_call`` steps. May be ``None`` in deployments with no MCP
+    integration; in that case any workflow carrying ``mcp_tool_call`` steps
+    would have been rejected at load time by the schema validator's
+    registry-required rule (T01), so the executor never reaches the fork
+    with a None registry in normal operation.
+    """
 
     @mcp.tool()
     @_trap_errors("category")
@@ -570,18 +697,49 @@ def register_tools(mcp, workflows):
         sid = state.create_session(workflow_type, current_step=first_step["id"])
         state.increment_visit(sid, first_step["id"])
 
+        # Auto-execute any mcp_tool_call steps at the front of the workflow
+        # before returning the first directive-bearing step to the client.
+        # Start with a clean step_data + the first step's id.
+        step_data: dict = {}
+        next_step_id, cascade_err = _auto_execute_mcp_steps(
+            first_step["id"], wf, sid, step_data, registry
+        )
+        if cascade_err is not None:
+            state.update_session(sid, current_step=next_step_id, step_data=step_data)
+            return cascade_err
+        if next_step_id != first_step["id"]:
+            # mcp steps executed — persist step_data and the advance.
+            state.update_session(sid, current_step=next_step_id, step_data=step_data)
+            if next_step_id != _COMPLETE:
+                state.increment_visit(sid, next_step_id)
+
+        if next_step_id == _COMPLETE:
+            return {
+                "session_id": sid,
+                "workflow_type": workflow_type,
+                "status": "workflow_complete",
+                "message": "All steps complete. Call generate_artifact to produce final output.",
+                "context": context,
+            }
+
+        _, effective_first = _find_step(wf, next_step_id)
+        assert effective_first is not None
         result = {
             "session_id": sid,
             "workflow_type": workflow_type,
-            "current_step": {"id": first_step["id"], "title": first_step["title"]},
-            "directive": first_step["directive_template"],
+            "current_step": {"id": effective_first["id"], "title": effective_first["title"]},
+            "directive": effective_first["directive_template"],
             "do_not": _DO_NOT_RULES,
             "conversation_repair": _repair_for(wf),
-            "gates": first_step["gates"],
+            "gates": effective_first["gates"],
             "context": context,
         }
-        if first_step.get("directives"):
-            result["directives"] = first_step["directives"]
+        if effective_first.get("directives"):
+            result["directives"] = effective_first["directives"]
+        if effective_first.get("inject_context"):
+            result["injected_context"] = _assemble_context(
+                effective_first["inject_context"], step_data
+            )
         return result
 
     @mcp.tool()
@@ -883,6 +1041,18 @@ def register_tools(mcp, workflows):
                     )
                 return child_error
 
+            # Auto-execute mcp_tool_call steps at the new pointer.
+            next_step_id, cascade_err = _auto_execute_mcp_steps(
+                next_step_id, wf, session_id, step_data, registry
+            )
+            if cascade_err is not None:
+                state.update_session(session_id, current_step=next_step_id, step_data=step_data)
+                if state.parent_of(session_id) is not None:
+                    return _wrap_child_failure_into_parent_escalation(
+                        session, wf, reason="cascade_error", child_error=cascade_err,
+                    )
+                return cascade_err
+
             if next_step_id != _COMPLETE:
                 state.increment_visit(session_id, next_step_id)
             state.update_session(session_id, current_step=next_step_id, step_data=step_data)
@@ -895,6 +1065,7 @@ def register_tools(mcp, workflows):
                     {**session, "current_step": next_step_id, "step_data": step_data},
                     wf,
                     workflows,
+                    registry=registry,
                 )
 
             result: dict = {
@@ -1025,6 +1196,18 @@ def register_tools(mcp, workflows):
                 )
             return child_error
 
+        # Auto-execute mcp_tool_call steps at the new pointer.
+        next_step_id, cascade_err = _auto_execute_mcp_steps(
+            next_step_id, wf, session_id, step_data, registry
+        )
+        if cascade_err is not None:
+            state.update_session(session_id, current_step=next_step_id, step_data=step_data)
+            if state.parent_of(session_id) is not None:
+                return _wrap_child_failure_into_parent_escalation(
+                    session, wf, reason="cascade_error", child_error=cascade_err,
+                )
+            return cascade_err
+
         # Track visit count for the next step
         if next_step_id != _COMPLETE:
             state.increment_visit(session_id, next_step_id)
@@ -1039,6 +1222,7 @@ def register_tools(mcp, workflows):
                 {**session, "current_step": next_step_id, "step_data": step_data},
                 wf,
                 workflows,
+                registry=registry,
             )
 
         result = {
@@ -1495,7 +1679,7 @@ def register_tools(mcp, workflows):
         # Happy path: digression frame at depth >= 1. Delegate to the same
         # resume helper the auto-resume-on-complete path uses so clients see
         # byte-compatible response shapes across both transitions.
-        return _resume_parent_after_digression(session, workflows)
+        return _resume_parent_after_digression(session, workflows, registry=registry)
 
     @mcp.tool()
     @_trap_errors()
