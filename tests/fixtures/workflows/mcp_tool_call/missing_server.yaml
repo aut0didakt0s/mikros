@@ -1,0 +1,25 @@
+# missing_server.yaml
+#
+# Declares a server name that is NOT in the registry. The validator must
+# reject this at load time with an actionable message naming the missing
+# server and the list of available names. Runtime is never reached.
+
+name: missing_server
+description: References an unknown MCP server; validator must reject.
+category: test
+output_format: structured_code
+
+steps:
+  - id: call
+    title: Call nonexistent server
+    action: mcp_tool_call
+    server: unknown_server_not_in_registry
+    tool: echo
+    args:
+      value: never-runs
+
+  - id: finish
+    title: Finish
+    directive_template: Never reached. (stub)
+    gates: [done]
+    anti_patterns: [skip]

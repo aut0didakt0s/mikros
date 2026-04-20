@@ -1,0 +1,40 @@
+# error_routing.yaml
+#
+# Error-routing composition: an mcp_tool_call step invoking `fail` produces
+# an ok=false envelope. Two downstream steps route via preconditions on the
+# boolean ok field (NOT via branches — envelope-conditional branches are a
+# deferred slice). Exercises boolean scalar equality in when_equals.
+
+name: error_routing
+description: Route downstream via precondition on envelope.ok bool.
+category: test
+output_format: structured_code
+
+steps:
+  - id: call
+    title: Call failing tool
+    action: mcp_tool_call
+    server: stub
+    tool: fail
+    args:
+      message: intentional-failure
+
+  - id: on_error
+    title: Handle error path
+    directive_template: Handle the MCP tool failure. (stub)
+    gates: [done]
+    anti_patterns: [skip]
+    precondition:
+      when_equals:
+        ref: step_data.call.ok
+        value: false
+
+  - id: on_success
+    title: Handle success path
+    directive_template: Handle the MCP tool success. (stub)
+    gates: [done]
+    anti_patterns: [skip]
+    precondition:
+      when_equals:
+        ref: step_data.call.ok
+        value: true

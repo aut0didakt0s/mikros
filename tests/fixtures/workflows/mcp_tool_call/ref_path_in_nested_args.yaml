@@ -1,0 +1,37 @@
+# ref_path_in_nested_args.yaml
+#
+# Exercises the args-walker: a ${step_data.<ref>} placeholder embedded at a
+# deeply nested position (inside a dict, inside a list, inside a dict) must
+# be resolved before the call is dispatched. First step captures the
+# content; mcp step embeds the ref deep in its args; test spies on
+# mcp_client.call and asserts the resolved value landed at the right leaf.
+
+name: ref_path_in_nested_args
+description: Ref-path in deep nested args position resolves correctly.
+category: test
+output_format: structured_code
+
+steps:
+  - id: seed
+    title: Seed payload
+    directive_template: Emit payload. (stub)
+    gates: [done]
+    anti_patterns: [skip]
+
+  - id: nested_ref
+    title: Echo payload via nested ref
+    action: mcp_tool_call
+    server: stub
+    tool: echo
+    args:
+      outer:
+        items:
+          - literal-before
+          - ${step_data.seed}
+          - literal-after
+
+  - id: finish
+    title: Finish
+    directive_template: Final step. (stub)
+    gates: [done]
+    anti_patterns: [skip]

@@ -433,12 +433,16 @@ def _validate_workflow_preconditions(steps: list, errors: list[str]) -> None:
                 f"(index {m}) which does not precede step '{label}' (index {k})"
             )
             continue
-        # (d) sub-path against a step lacking output_schema and collect: true
+        # (d) sub-path against a step lacking output_schema and collect: true.
+        # mcp_tool_call steps have an implicit envelope schema
+        # ({"ok": bool, "value": ..., "error": {...}}), so sub-path refs into
+        # them are always permitted.
         if len(parts) > 2:
             ref_step = sid_to_step[ref_sid]
             has_schema = "output_schema" in ref_step
             is_collect = ref_step.get("collect") is True
-            if not has_schema and not is_collect:
+            is_mcp_tool_call = ref_step.get("action") == "mcp_tool_call"
+            if not has_schema and not is_collect and not is_mcp_tool_call:
                 errors.append(
                     f"Step '{label}' precondition sub-path references step '{ref_sid}' "
                     f"which lacks both 'output_schema' and 'collect: true'; "

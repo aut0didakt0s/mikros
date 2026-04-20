@@ -1,0 +1,32 @@
+# success_then_read.yaml
+#
+# mcp_tool_call happy-path integration fixture.
+# Three-step shape: LLM step captures a topic string, mcp_tool_call
+# echoes it via the stub server, final LLM step consumes the echoed value.
+# Asserts the value flowed through mcp_tool_call unchanged.
+
+name: success_then_read
+description: Happy-path mcp_tool_call echo, then consume the echoed value.
+category: test
+output_format: structured_code
+
+steps:
+  - id: topic
+    title: Capture topic
+    directive_template: Emit a topic string. (stub)
+    gates: [done]
+    anti_patterns: [skip]
+
+  - id: echoed
+    title: Echo via MCP
+    action: mcp_tool_call
+    server: stub
+    tool: echo
+    args:
+      value: ${step_data.topic}
+
+  - id: consume
+    title: Consume echoed value
+    directive_template: Read step_data.echoed.value. (stub)
+    gates: [done]
+    anti_patterns: [skip]

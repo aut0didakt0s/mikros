@@ -1,0 +1,35 @@
+# nested_literal_args.yaml
+#
+# Passes a structured literal args tree (nested dict + list + primitive mix)
+# to the stub tool. No refs anywhere. Test asserts the walker assembled the
+# nested structure verbatim and handed it to mcp_client.call. Since the
+# actual stub `echo` tool only accepts a single string field, this test
+# spies on mcp_client.call rather than round-tripping through the live
+# stub; the assertion target is the walker, not the server.
+
+name: nested_literal_args
+description: Nested literal args tree for mcp_tool_call.
+category: test
+output_format: structured_code
+
+steps:
+  - id: nested
+    title: Call with nested literal args
+    action: mcp_tool_call
+    server: stub
+    tool: echo
+    args:
+      config:
+        verbose: true
+        retries: 3
+        items:
+          - first
+          - second
+          - 42
+      label: outer
+
+  - id: finish
+    title: Finish
+    directive_template: Final step. (stub)
+    gates: [done]
+    anti_patterns: [skip]
