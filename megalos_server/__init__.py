@@ -5,7 +5,12 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from megalos_server.mcp_registry import Registry
-from megalos_server.middleware import CallerIdentityMiddleware, ValidationErrorMiddleware
+from megalos_server.middleware import (
+    CallerIdentityMiddleware,
+    RateLimitMiddleware,
+    ValidationErrorMiddleware,
+)
+from megalos_server.ratelimit import RateLimitConfig, RateLimiter
 from megalos_server.schema import load_workflow, validate_workflow_calls
 from megalos_server.tools import register_tools
 
@@ -54,6 +59,11 @@ def create_app(
     mcp = FastMCP("megalos")
     mcp.add_middleware(ValidationErrorMiddleware())  # type: ignore[attr-defined]
     mcp.add_middleware(CallerIdentityMiddleware())  # type: ignore[attr-defined]
+    # Rate-limit middleware sits AFTER CallerIdentityMiddleware so the
+    # caller_identity_var is populated before the limiter consults it on
+    # the session axis. Primitive is constructed from env-var config.
+    limiter = RateLimiter(RateLimitConfig.from_env())
+    mcp.add_middleware(RateLimitMiddleware(limiter))  # type: ignore[attr-defined]
     register_tools(mcp, workflows, registry=registry)
     # Attach workflows dict for introspection / test mutation. Underscore = private.
     mcp._megalos_workflows = workflows  # type: ignore[attr-defined]
