@@ -21,6 +21,11 @@ uv.lock
 .coverage
 htmlcov/
 
+# pytest-benchmark machine-specific timing archives — snapshot the
+# numbers in docs/PERFORMANCE.md instead of committing raw JSON.
+.benchmarks/
+.pytest_benchmark/
+
 # Runtime DB
 server/megalos_sessions.db
 
