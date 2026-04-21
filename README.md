@@ -17,7 +17,6 @@
 - [MCP servers](#mcp-servers)
 - [Authoring a new domain repo](#authoring-a-new-domain-repo)
 - [Cross-model panel (optional extra)](#cross-model-panel-optional-extra)
-- [simplicity-guard](#simplicity-guard)
 - [mikrós — future agent-skills library](#mikrós--future-agent-skills-library)
 - [The iron rule](#the-iron-rule)
 - [License](#license)
@@ -33,7 +32,7 @@ Determinism comes from gates in the runtime, not from prompt engineering. The MC
 
 | Layer | What it is | Status |
 |-------|------------|--------|
-| **megálos** (this repo) | YAML schema, MCP server runtime (`megalos-server` package), validation tooling, simplicity-guard | live |
+| **megálos** (this repo) | YAML schema, MCP server runtime (`megalos-server` package), validation tooling | live |
 | **megálos-{domain}** | Per-domain MCP servers built on the runtime | live: writing, analysis, professional |
 | **agora-creations** | Bring-your-own-key chat client (BYOK) | future |
 
@@ -145,12 +144,6 @@ results = panel_query([
 ```
 
 Provider SDKs resolve by model-name prefix (`claude-` → Anthropic, `gpt-` → OpenAI). Retries, backoff, rate-limit classification, and JSON-lines record IO are built in. See [`docs/panel.md`](docs/panel.md) for the full API, error taxonomy, and retry budgets.
-
-## simplicity-guard
-
-The anti-bloat skill at `simplicity-guard/`. Copy into your project at `.claude/skills/simplicity-guard/` for Claude Code to auto-discover.
-
-Enforces explicit anti-defaults: no enterprise patterns, no premature abstractions (three-strikes rule), no dataclass for internal data, flat over nested config, boring beats clever, and the iron rule.
 
 ## mikrós — future agent-skills library
 
