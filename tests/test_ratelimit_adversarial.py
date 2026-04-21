@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import tracemalloc
 import unicodedata
 from typing import Any, Callable, Iterator, Literal
 
@@ -409,10 +410,25 @@ def test_proxy_header_forwarded_for_deferred():
 # ===========================================================================
 
 
+# Memory regression gate for the 100K-IP stress. Peak memory measured at
+# cap=10_000 is ~3.0 MB with <0.1% variance across 3 runs. The ceiling is
+# set at 5 MB (≈1.67× measurement) — tight enough to catch a >70%
+# regression from (e.g.) a LRU bug that leaks bucket refs, loose enough to
+# absorb small runtime variance. If ``ip_store_cap`` changes, re-measure
+# and re-pick the ceiling per docs/PERFORMANCE.md §Memory regression gate.
+_IP_STORE_100K_PEAK_CEILING_MB = 5.0
+
+
 def test_rotating_ip_attack_bounded_by_store_cap():
     """Property: 100K unique IPs, each making one call, fit inside a
     bounded store — the LRU evicts past the cap instead of growing
-    without bound. Protects against rotating-IP memory attack."""
+    without bound. Protects against rotating-IP memory attack.
+
+    Memory regression gate: tracemalloc wraps the stress loop and
+    asserts peak bytes under the ceiling derived in
+    ``docs/PERFORMANCE.md``. A regression caused by (e.g.) a bucket
+    leak, a forgotten LRU eviction, or a new per-bucket field that
+    bloats the dict would push peak above the ceiling and fail loud."""
     clock = FakeClock()
     # Use the documented default cap (10k) so the assertion matches doc.
     cap = 10_000
@@ -420,10 +436,19 @@ def test_rotating_ip_attack_bounded_by_store_cap():
         ip_rate=1.0, ip_burst=5.0, ip_store_cap=cap, ip_idle_ttl_sec=1e9
     )
     limiter = RateLimiter(cfg, monotonic=clock)
+    tracemalloc.start()
     for i in range(100_000):
         limiter.try_consume(AXIS_IP, f"10.0.{i // 256}.{i % 256}")
+    _current, peak_bytes = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
     assert len(limiter._ip_store.buckets) <= cap, (
         f"ip store grew past cap: {len(limiter._ip_store.buckets)} > {cap}"
+    )
+    peak_mb = peak_bytes / (1024 * 1024)
+    assert peak_mb <= _IP_STORE_100K_PEAK_CEILING_MB, (
+        f"100K-IP stress peak memory {peak_mb:.2f} MB exceeded ceiling "
+        f"{_IP_STORE_100K_PEAK_CEILING_MB:.2f} MB — LRU/bucket-shape "
+        "regression. Re-measure per docs/PERFORMANCE.md §Memory regression gate."
     )
 
 
