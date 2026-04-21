@@ -1,18 +1,17 @@
 """Tests for megalos_server.mcp_client.
 
-Covers each ``CallOutcome`` variant, structured-log fields, and cold-start
-latency recording. The stub FastMCP server (T02 fixture) supplies the
-happy path and most error shapes; ``ProtocolError`` paths that the stub
-cannot produce (non-text content, malformed envelopes) are covered via
-mock injection.
+Covers each ``CallOutcome`` variant and structured-log fields. The stub
+FastMCP server (T02 fixture) supplies the happy path and most error
+shapes; ``ProtocolError`` paths that the stub cannot produce (non-text
+content, malformed envelopes) are covered via mock injection.
+
+Cold-start latency measurement lives in
+``benchmarks/bench_mcp_client_cold_start.py``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import statistics
-from pathlib import Path
 from typing import Any
 
 import pytest  # type: ignore[import-not-found]
@@ -29,51 +28,6 @@ from megalos_server.mcp_client import (
 )
 from megalos_server.mcp_registry import AuthConfig, Registry, ServerConfig
 from tests.fixtures.mcp_stub import mcp_stub_server  # noqa: F401
-
-
-# --- Latency recording -----------------------------------------------------
-#
-# A single module-level list accumulates duration_ms from every ``Ok``
-# outcome produced in this file. A session-scoped finalizer writes one
-# JSONL file and emits p50/p95/max. This keeps the measurement machinery
-# local to T03 — no cross-file coupling, no plugin layer.
-
-_LATENCY_SAMPLES: list[dict[str, Any]] = []
-_LATENCY_PATH = Path("runs/m006_s01_t03_latency.jsonl")
-
-
-def _record_if_ok(outcome: CallOutcome, test_name: str) -> None:
-    if isinstance(outcome, Ok):
-        _LATENCY_SAMPLES.append(
-            {"test_name": test_name, "duration_ms": outcome.duration_ms}
-        )
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _flush_latency_jsonl() -> Any:
-    """Write collected Ok latencies to JSONL and emit p50/p95/max summary."""
-    yield
-    if not _LATENCY_SAMPLES:
-        return
-    _LATENCY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _LATENCY_PATH.open("w", encoding="utf-8") as fh:
-        for sample in _LATENCY_SAMPLES:
-            fh.write(json.dumps(sample) + "\n")
-
-    durations = sorted(s["duration_ms"] for s in _LATENCY_SAMPLES)
-    p50 = statistics.median(durations)
-    # Nearest-rank p95: index ceil(0.95 * n) - 1, clamped to [0, n-1].
-    # Avoids statistics.quantiles' linear interpolation producing a p95
-    # above the observed max with small sample counts.
-    mx = durations[-1]
-    import math
-
-    p95_idx = max(0, min(len(durations) - 1, math.ceil(0.95 * len(durations)) - 1))
-    p95 = durations[p95_idx]
-    print(
-        f"\n[mcp_client cold-start latency] n={len(durations)} "
-        f"p50={p50:.1f}ms p95={p95:.1f}ms max={mx:.1f}ms → {_LATENCY_PATH}"
-    )
 
 
 # --- Registry helpers ------------------------------------------------------
@@ -127,13 +81,12 @@ def _prime_cache_permissive(server_name: str, tool_name: str) -> None:
 # --- Outcome-class coverage -------------------------------------------------
 
 
-def test_ok(mcp_stub_server, request) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
+def test_ok(mcp_stub_server) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
     reg = _registry_for_stub(mcp_stub_server.url)
     outcome = mcp_client.call("stub", "echo", {"value": "hello"}, reg)
     assert isinstance(outcome, Ok), outcome
     assert outcome.value == "hello"
     assert outcome.duration_ms > 0
-    _record_if_ok(outcome, request.node.name)
 
 
 def test_tool_execution_error(mcp_stub_server, request) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
@@ -244,12 +197,11 @@ def test_non_text_content_becomes_protocol_error() -> None:
 
 
 def test_log_emission_fields(
-    mcp_stub_server, caplog: pytest.LogCaptureFixture, request  # type: ignore[no-untyped-def]  # noqa: F811
+    mcp_stub_server, caplog: pytest.LogCaptureFixture  # type: ignore[no-untyped-def]  # noqa: F811
 ) -> None:
     reg = _registry_for_stub(mcp_stub_server.url)
     with caplog.at_level(logging.INFO, logger="megalos_server.mcp"):
-        outcome = mcp_client.call("stub", "echo", {"value": "secret"}, reg)
-    _record_if_ok(outcome, request.node.name)
+        mcp_client.call("stub", "echo", {"value": "secret"}, reg)
 
     info_records = [
         r for r in caplog.records if r.levelno == logging.INFO and r.name == "megalos_server.mcp"
@@ -269,32 +221,15 @@ def test_log_emission_fields(
     assert all(c in "0123456789abcdef" for c in rec.arg_fingerprint)
 
 
-def test_cold_start_latency_recording(mcp_stub_server, request) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
-    """Drive at least one Ok through the recorder, then verify the JSONL
-    file exists (after module teardown). We can't assert on file contents
-    mid-run because the finalizer flushes at module teardown; instead we
-    assert on the in-memory buffer the finalizer drains."""
-    reg = _registry_for_stub(mcp_stub_server.url)
-    outcome = mcp_client.call("stub", "echo", {"value": "latency"}, reg)
-    assert isinstance(outcome, Ok)
-    _record_if_ok(outcome, request.node.name)
-    # At least the sample we just recorded must be in the buffer.
-    assert any(
-        s["test_name"] == request.node.name and s["duration_ms"] > 0
-        for s in _LATENCY_SAMPLES
-    )
-
-
 def test_raw_args_never_logged(
-    mcp_stub_server, caplog: pytest.LogCaptureFixture, request  # type: ignore[no-untyped-def]  # noqa: F811
+    mcp_stub_server, caplog: pytest.LogCaptureFixture  # type: ignore[no-untyped-def]  # noqa: F811
 ) -> None:
     """Defense-in-depth: a sentinel value in args must not appear in any
     log record emitted during the call."""
     reg = _registry_for_stub(mcp_stub_server.url)
     sentinel = "SENTINEL_VALUE_XYZZY_12345"
     with caplog.at_level(logging.DEBUG, logger="megalos_server.mcp"):
-        outcome = mcp_client.call("stub", "echo", {"value": sentinel}, reg)
-    _record_if_ok(outcome, request.node.name)
+        mcp_client.call("stub", "echo", {"value": sentinel}, reg)
     for rec in caplog.records:
         assert sentinel not in rec.getMessage()
         assert sentinel not in str(getattr(rec, "args", ""))
@@ -547,7 +482,7 @@ def test_registry_timeout_default_used(
 
 
 def test_valid_args_pass_validation_and_call_succeeds(
-    mcp_stub_server, request  # type: ignore[no-untyped-def]  # noqa: F811
+    mcp_stub_server  # type: ignore[no-untyped-def]  # noqa: F811
 ) -> None:
     """Valid args against ``schema_required``'s inputSchema → Ok; validator
     lands in the cache after the first successful fetch."""
@@ -556,7 +491,6 @@ def test_valid_args_pass_validation_and_call_succeeds(
     assert isinstance(outcome, Ok), outcome
     assert outcome.value == "count=7"
     assert ("stub", "schema_required") in mcp_client._validator_cache
-    _record_if_ok(outcome, request.node.name)
 
 
 def test_type_mismatch_short_circuits_before_tools_call(
