@@ -10,12 +10,14 @@ from . import state
 from .errors import (
     ARTIFACT_MAX,
     CONTENT_MAX,
+    CROSS_SESSION_ACCESS_DENIED,
     FRAME_TYPE_NOT_POPPABLE,
     NO_FRAME_TO_POP,
     SESSION_STACK_FULL,
     SUB_WORKFLOW_PENDING,
     error_response,
 )
+from .identity_ctx import caller_identity_var
 from .mcp_registry import Registry
 from .state import COMPLETE as _COMPLETE
 from .state import _compute_fingerprint as _fp
@@ -287,12 +289,30 @@ def _find_step(workflow, step_id):
 
 
 def _resolve_session(session_id, workflows):
-    """Look up session and its workflow. Returns (session, wf) or (None, error_dict)."""
+    """Look up session and its workflow. Returns (session, wf) or (None, error_dict).
+
+    Single planting site for the caller/owner identity access-check: the
+    per-request caller_identity (populated by CallerIdentityMiddleware) is
+    compared against session["owner_identity"] before the session is handed
+    back to any tool. Every session-scoped tool in the surface routes through
+    this helper, so the check is present for all of them without threading
+    a ctx parameter through every tool signature.
+
+    Today both sides carry ANONYMOUS_IDENTITY so the check is structurally a
+    no-op; the emission path is kept covered by test_identity_seam.py so the
+    Phase G bearer-auth path drops in without re-architecture."""
     try:
         session = state.get_session(session_id)
     except KeyError as e:
         return None, error_response(
             "session_not_found", str(e), session_fingerprint=_fp(session_id)
+        )
+    caller_identity = caller_identity_var.get()
+    if caller_identity != session["owner_identity"]:
+        return None, error_response(
+            CROSS_SESSION_ACCESS_DENIED,
+            f"caller identity does not own session {session['fingerprint']}",
+            session_fingerprint=session["fingerprint"],
         )
     wf = workflows.get(session["workflow_type"])
     if not wf:
@@ -1709,6 +1729,21 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
         err = _check_str(session_id, "session_id", required=True)
         if err:
             return err
+        # Identity access-check: delete_session bypasses _resolve_session (it
+        # doesn't need the workflow object), so plant the check explicitly
+        # here. Structurally a no-op today under ANONYMOUS_IDENTITY both sides.
+        try:
+            _owner_session = state.get_session(session_id)
+        except KeyError:
+            _owner_session = None
+        if _owner_session is not None:
+            caller_identity = caller_identity_var.get()
+            if caller_identity != _owner_session["owner_identity"]:
+                return error_response(
+                    CROSS_SESSION_ACCESS_DENIED,
+                    f"caller identity does not own session {_owner_session['fingerprint']}",
+                    session_fingerprint=_owner_session["fingerprint"],
+                )
         # Parent-owned guard (generalized): refuse deletion of any framed session
         # (call-frame or digression-frame) while a parent still owns it. See the
         # matching guard in revise_step for the mechanism.

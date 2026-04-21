@@ -12,6 +12,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from . import db, errors
+from .identity import ANONYMOUS_IDENTITY
 
 COMPLETE = "__complete__"
 
@@ -71,12 +72,19 @@ def _row_to_session(row: tuple) -> dict:
     """Hydrate a sessions row into a detached dict. Column order matches _SELECT_COLS.
 
     Attaches `fingerprint` = _compute_fingerprint(session_id) so every hydrated
-    session carries its log-safe identifier without a separate lookup."""
+    session carries its log-safe identifier without a separate lookup.
+
+    Attaches `owner_identity` = ANONYMOUS_IDENTITY as a pure derivation. Not
+    persisted (no schema column); re-attached on every hydrate path so the
+    access-check seam in tools.py can compare caller_identity vs
+    session["owner_identity"] uniformly. See megalos_server/identity.py for
+    the Phase G bearer-auth extension path."""
     escalation = json.loads(row[6]) if row[6] else None
     session_id = row[0]
     return {
         "session_id": session_id,
         "fingerprint": _compute_fingerprint(session_id),
+        "owner_identity": ANONYMOUS_IDENTITY,
         "workflow_type": row[1],
         "current_step": row[2],
         "step_data": json.loads(row[3]),
@@ -289,6 +297,7 @@ def list_sessions() -> list[dict]:
         result.append({
             "session_id": sid,
             "fingerprint": _compute_fingerprint(sid),
+            "owner_identity": ANONYMOUS_IDENTITY,
             "workflow_type": row[1],
             "current_step": row[2],
             "status": status,

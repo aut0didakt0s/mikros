@@ -28,6 +28,7 @@ SESSION_STACK_FULL = "session_stack_full"
 CALL_STEP_REQUIRES_ENTER_SUB_WORKFLOW = "call_step_requires_enter_sub_workflow"
 FRAME_TYPE_NOT_POPPABLE = "frame_type_not_poppable"
 NO_FRAME_TO_POP = "no_frame_to_pop"
+CROSS_SESSION_ACCESS_DENIED = "cross_session_access_denied"
 
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576
