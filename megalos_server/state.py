@@ -5,9 +5,10 @@ dict on every call. Mutations to the returned dict (or its nested dicts) do NOT
 persist. Use update_session (and the dedicated RMW helpers) to persist changes.
 """
 
+import hashlib
 import json
 import logging
-import uuid
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from . import db, errors
@@ -15,6 +16,17 @@ from . import db, errors
 COMPLETE = "__complete__"
 
 _log = logging.getLogger("megalos_server.state")
+
+
+def _compute_fingerprint(session_id: str) -> str:
+    """Pure derivation: sha256(session_id) truncated to 12 hex chars (48 bits).
+
+    Stable per session_id, safe to share in logs and bug reports — reveals no
+    entropy beyond 'which session this was' to anyone lacking the session_id.
+    Not persisted: the fingerprint is a function of an already-stored value, so
+    storing it would create a drift vector. Re-derived on every hydrate path.
+    """
+    return hashlib.sha256(session_id.encode()).hexdigest()[:12]
 
 
 class StackFull(Exception):
@@ -52,10 +64,15 @@ def _now_iso() -> str:
 
 
 def _row_to_session(row: tuple) -> dict:
-    """Hydrate a sessions row into a detached dict. Column order matches _SELECT_COLS."""
+    """Hydrate a sessions row into a detached dict. Column order matches _SELECT_COLS.
+
+    Attaches `fingerprint` = _compute_fingerprint(session_id) so every hydrated
+    session carries its log-safe identifier without a separate lookup."""
     escalation = json.loads(row[6]) if row[6] else None
+    session_id = row[0]
     return {
-        "session_id": row[0],
+        "session_id": session_id,
+        "fingerprint": _compute_fingerprint(session_id),
         "workflow_type": row[1],
         "current_step": row[2],
         "step_data": json.loads(row[3]),
@@ -114,7 +131,7 @@ def create_session(
     Lone session = depth 0; one push = depth 1; at depth N==max_stack_depth,
     the next push is rejected.
     """
-    sid = uuid.uuid4().hex[:12]
+    sid = secrets.token_urlsafe(32)
     now = _now_iso()
     empty = "{}"
     cap = errors.get_session_cap()
@@ -267,6 +284,7 @@ def list_sessions() -> list[dict]:
             under_sid = None
         result.append({
             "session_id": sid,
+            "fingerprint": _compute_fingerprint(sid),
             "workflow_type": row[1],
             "current_step": row[2],
             "status": status,
