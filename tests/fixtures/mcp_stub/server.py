@@ -5,6 +5,10 @@ classes MCP client tests must handle (success, tool error, schema error,
 slow response). TransportError cases are tested elsewhere by pointing a
 client at an unreachable URL — no dedicated tool here.
 
+Tool definitions live in `mcp_stub.tools` and are attached here via the
+shared `register_tools` helper, so the in-process test stub and the
+Horizon-deployed stub (`mcp_stub/main.py`) run byte-identical code.
+
 The fixture `mcp_stub_server` starts the server in a background daemon
 thread bound to 127.0.0.1 on an OS-assigned free port, waits for the
 port to accept connections, and yields a `StubServerInfo` with `url`
@@ -22,7 +26,8 @@ from typing import NamedTuple
 
 import pytest  # type: ignore[import-not-found]
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
+
+from mcp_stub.tools import register_tools
 
 
 class StubServerInfo(NamedTuple):
@@ -31,30 +36,9 @@ class StubServerInfo(NamedTuple):
 
 
 def _build_stub() -> FastMCP:
-    """Build a fresh FastMCP instance with the five deterministic tools."""
+    """Build a fresh FastMCP instance with the four deterministic tools."""
     mcp = FastMCP("stub")
-
-    @mcp.tool
-    def echo(value: str) -> str:
-        """Return `value` unchanged."""
-        return value
-
-    @mcp.tool
-    def fail(message: str) -> str:
-        """Raise a ToolError with the given message (maps to isError envelope)."""
-        raise ToolError(message)
-
-    @mcp.tool
-    def schema_required(count: int) -> str:
-        """Accept an int. Clients passing a non-int trip server-side schema validation."""
-        return f"count={count}"
-
-    @mcp.tool
-    def sleep(seconds: float) -> str:
-        """Sleep `seconds` then return. Used by client-side timeout tests."""
-        time.sleep(seconds)
-        return f"slept={seconds}"
-
+    register_tools(mcp)
     return mcp
 
 

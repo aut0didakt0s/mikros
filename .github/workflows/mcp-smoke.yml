@@ -1,0 +1,35 @@
+# Nightly advisory live-smoke for the deployed MCP stub.
+#   - Runs every day at 06:00 UTC + on-demand via workflow_dispatch.
+#   - NOT a required check. Failure signals live-path drift between the
+#     megalos MCP client and the Horizon-deployed stub, not a merge blocker.
+#   - MCP_STUB_URL injected from the GitHub secret of the same name;
+#     operator sets the secret after the one-click Horizon deploy.
+
+name: mcp-smoke
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  mcp-smoke:
+    name: mcp-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: 'pyproject.toml'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: uv sync
+        run: uv sync --extra panel
+      - name: Run live smoke
+        env:
+          MCP_STUB_URL: ${{ secrets.MCP_STUB_URL }}
+        run: uv run python ci/mcp_smoke.py

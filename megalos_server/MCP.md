@@ -317,6 +317,25 @@ fails schema validation before the consuming step runs. Downstream steps
 then read `step_data.sanitize.<field>` rather than
 `step_data.forecast.value` — the raw untrusted text is quarantined.
 
+## Live smoke
+
+A nightly advisory GitHub Actions job (`mcp-smoke`, workflow
+`.github/workflows/mcp-smoke.yml`) runs `ci/mcp_smoke.py` against a
+Horizon-deployed FastMCP stub (`mcp_stub/main.py:mcp`, auth off). The
+stub URL is pinned via the `MCP_STUB_URL` GitHub secret and set by the
+operator after running `./stub-deploy.sh` and completing the one-click
+deploy on horizon.prefect.io.
+
+- Current URL: `<PINNED AFTER OPERATOR DEPLOY>`
+- Trigger: `schedule: '0 6 * * *'` (06:00 UTC) + `workflow_dispatch`.
+- Check name: `mcp-smoke`. **Not** a required check — advisory only.
+- A red run indicates live-path drift between the client and the
+  deployed stub (envelope contract change, schema-cache staleness,
+  transport regression). It does not block merges.
+
+The smoke call is a single `echo(value="ci-smoke")` against the stub;
+any outcome other than `Ok(value="ci-smoke")` fails the job.
+
 ## Migration note
 
 The flat envelope `{ok, value|error}` is the v1 contract. Future extensions

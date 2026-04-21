@@ -29,7 +29,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["megalos_server*", "megalos_panel*"]
+include = ["megalos_server*", "megalos_panel*", "mcp_stub*"]
 
 [tool.setuptools.package-data]
 megalos_server = ["workflows/*.yaml", "*.md"]
