@@ -181,18 +181,43 @@ def test_http_without_extractable_ip_skips_ip_axis(monkeypatch):
     assert axes == [AXIS_SESSION]
 
 
-def test_deny_attaches_metadata_but_still_calls_next(monkeypatch):
-    # T01 contract: denial is observation-only. call_next still fires;
-    # deny metadata is attached to fastmcp_context state for T02.
+def test_deny_returns_rate_limited_envelope_without_calling_next(monkeypatch):
+    # T02 contract: on denial the middleware returns a ``rate_limited``
+    # ToolResult envelope and does NOT invoke call_next. Deny metadata is
+    # still attached to fastmcp_context state (preserved across T01/T02).
+    from fastmcp.tools import ToolResult  # type: ignore[attr-defined]
+
+    from megalos_server.ratelimit import _reset_deny_log_cache_for_test
+
+    _reset_deny_log_cache_for_test()
     spy = SpyLimiter(deny={AXIS_SESSION})
     mw = _mw(spy)
     ctx = _ctx("get_state", {"session_id": "s1"}, transport="stdio")
     _patch_ip(monkeypatch, None)
-    result = _run(mw.on_call_tool(ctx, _noop_call_next))
-    assert result == "ok"
-    assert ctx.fastmcp_context is not None
-    metadata = ctx.fastmcp_context._state.get("rate_limit_denied")
-    assert metadata == {"scope": AXIS_SESSION, "retry_after_ms": 1234.5}
+
+    called_next = False
+
+    async def _spy_call_next(_c: Any) -> str:
+        nonlocal called_next
+        called_next = True
+        return "ok"
+
+    result = _run(mw.on_call_tool(ctx, _spy_call_next))
+    assert called_next is False
+    assert isinstance(result, ToolResult)
+    env = result.structured_content
+    assert env is not None
+    assert env["status"] == "error"
+    assert env["code"] == "rate_limited"
+    assert env["error"] == "rate limit exceeded"
+    assert env["scope"] == AXIS_SESSION
+    assert env["retry_after_ms"] == 1234.5
+    # Session-axis denials attach session_fingerprint (hashed, not raw).
+    assert "session_fingerprint" in env
+    assert env["session_fingerprint"] != "s1"
+    # No attacker-signal fields allowed in the envelope.
+    for forbidden in ("capacity", "tokens", "current_count", "session_id", "ip"):
+        assert forbidden not in env
 
 
 def test_unknown_transport_treated_as_non_http(monkeypatch):

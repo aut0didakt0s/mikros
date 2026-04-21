@@ -1,4 +1,4 @@
-"""Token-bucket rate limiter primitive + bounded IP bucket store.
+"""Token-bucket rate limiter primitive + bounded IP bucket store + deny WARN log.
 
 Sync-consume constraint (verbatim):
 
@@ -6,8 +6,10 @@ Sync-consume constraint (verbatim):
     block atomic at asyncio event-loop level, no lock needed. If state
     moves out-of-process, revisit.
 
-The primitive ships in T01; log emission and tool-surface error-envelope
-wiring land in T02. No logs are emitted here yet.
+The primitive ships in T01. T02 adds the WARN-log emission hook
+(``emit_rate_limit_warn``) with (scope, identity, 60s window) dedupe via
+a bounded in-memory LRU, so a sustained attack produces one log line per
+minute per (scope, identity), not one per request.
 
 Three axes — session, ip, ip_session_create — each with its own bucket
 store. The per-session store is an unbounded dict keyed by session_id
@@ -23,11 +25,15 @@ no negative refill, no accidental token creation, no double-spend.
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import os
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable
+
+_log = logging.getLogger("megalos_server.ratelimit")
 
 # ---------------------------------------------------------------------------
 # Config
@@ -288,6 +294,136 @@ class RateLimiter:
             bucket.last_refill = now
 
 
+# ---------------------------------------------------------------------------
+# Deny WARN log emission with dedupe
+# ---------------------------------------------------------------------------
+
+
+# Dedupe window: one log line per (scope, identity) per WINDOW seconds.
+# 60s matches the plan — sustained attack produces one line per minute per
+# (scope, identity) rather than one per request.
+_DEDUPE_WINDOW_SEC = 60.0
+
+# Idle-TTL: sweep stale entries out of the dedupe cache. Naturally smaller
+# than the per-IP bucket store — entries here carry a single timestamp,
+# not a bucket.
+_DEDUPE_IDLE_TTL_SEC = 300.0
+
+# Hard cap on the dedupe cache. Bounds memory under a rotating-identity
+# attack. 1000 entries * ~40 bytes key + 8 byte timestamp ~= 50kB.
+_DEDUPE_MAX_ENTRIES = 1000
+
+# Sweep stale entries once every N inserts. Matches the _IpStore cadence —
+# amortized O(1) without a background task.
+_DEDUPE_SWEEP_EVERY = 64
+
+
+class _DenyLogDedupe:
+    """Bounded LRU dedupe cache for deny WARN log emission.
+
+    Keyed by ``(scope, identity)``; value is the monotonic timestamp of the
+    last emitted log line for that pair. ``should_emit(now)`` returns True
+    iff the last-emit timestamp is absent or older than ``WINDOW`` seconds,
+    and records ``now`` as the new emit timestamp.
+    """
+
+    def __init__(
+        self,
+        window_sec: float = _DEDUPE_WINDOW_SEC,
+        idle_ttl_sec: float = _DEDUPE_IDLE_TTL_SEC,
+        max_entries: int = _DEDUPE_MAX_ENTRIES,
+    ):
+        self._window = window_sec
+        self._idle_ttl = idle_ttl_sec
+        self._max = max_entries
+        self._entries: OrderedDict[tuple[str, str], float] = OrderedDict()
+        self._access_count = 0
+
+    def should_emit(self, scope: str, identity: str, now: float) -> bool:
+        self._access_count += 1
+        if self._access_count % _DEDUPE_SWEEP_EVERY == 0:
+            self._sweep_expired(now)
+        key = (scope, identity)
+        last = self._entries.get(key)
+        if last is not None and (now - last) < self._window:
+            # Still inside the dedupe window — suppress. Promote the key so
+            # it isn't evicted while the window is active.
+            self._entries.move_to_end(key)
+            return False
+        self._entries[key] = now
+        self._entries.move_to_end(key)
+        self._evict_if_over_cap()
+        return True
+
+    def _evict_if_over_cap(self) -> None:
+        while len(self._entries) > self._max:
+            self._entries.popitem(last=False)
+
+    def _sweep_expired(self, now: float) -> None:
+        if self._idle_ttl <= 0:
+            return
+        cutoff = now - self._idle_ttl
+        expired = [k for k, ts in self._entries.items() if ts < cutoff]
+        for k in expired:
+            del self._entries[k]
+
+
+# Module-level dedupe singleton. Process-memory only; resets on redeploy —
+# intentional, matches bucket-store semantics (see docs/rate-limits.md).
+_deny_log_cache = _DenyLogDedupe()
+
+
+def hash_ip(ip: str) -> str:
+    """Fingerprint a raw remote IP for log emission.
+
+    Rationale: raw IP in log lines is PII-adjacent in some jurisdictions
+    and potentially hands an attacker a free correlation ID. Hash with the
+    same shape the session_fingerprint uses — sha256 truncated to 12 hex
+    chars. Collisions at 48 bits are large enough for incident-response
+    granularity.
+    """
+    return hashlib.sha256(ip.encode()).hexdigest()[:12]
+
+
+def emit_rate_limit_warn(
+    scope: str,
+    identity: str,
+    identity_kind: str,
+    retry_after_ms: float,
+    now: float | None = None,
+) -> bool:
+    """Emit a structured WARN log line for a rate-limit denial (deduped).
+
+    Fields: ``event=rate_limit_exceeded``, ``scope``, ``retry_after_ms``
+    plus the caller-chosen ``identity_kind`` (``session_fingerprint`` or
+    ``ip_fingerprint``) carrying ``identity``. No raw session_id or raw
+    IP passes through this function — callers must pre-hash.
+
+    Dedupe by ``(scope, identity, 60s)``. Returns True iff a log line was
+    actually emitted; False when the emission was suppressed by dedupe.
+    """
+    tick = now if now is not None else time.monotonic()
+    if not _deny_log_cache.should_emit(scope, identity, tick):
+        return False
+    _log.warning(
+        "rate_limit_exceeded",
+        extra={
+            "event": "rate_limit_exceeded",
+            "scope": scope,
+            identity_kind: identity,
+            "retry_after_ms": retry_after_ms,
+        },
+    )
+    return True
+
+
+def _reset_deny_log_cache_for_test() -> None:
+    """Test-only hook: drop the dedupe cache so integration tests that
+    share a process don't bleed dedupe state across test functions."""
+    global _deny_log_cache
+    _deny_log_cache = _DenyLogDedupe()
+
+
 __all__ = [
     "AXIS_IP",
     "AXIS_IP_SESSION_CREATE",
@@ -295,4 +431,6 @@ __all__ = [
     "RateLimitConfig",
     "RateLimiter",
     "TokenBucket",
+    "emit_rate_limit_warn",
+    "hash_ip",
 ]
