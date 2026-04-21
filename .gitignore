@@ -51,6 +51,7 @@ CLAUDE.original.md
 install.sh
 .claude/
 .bg-shell/
+simplicity-guard/
 
 # megálos runtime state (per-project, not shared — frozen archive)
 .megalos/
