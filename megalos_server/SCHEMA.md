@@ -137,6 +137,8 @@ When the registry is **not** provided, workflows that contain any `mcp_tool_call
 
 The CLI entry point `python -m megalos_server.validate <workflow>` accepts an optional `--registry <path>` flag. Without it, the CLI looks for `mcp_servers.yaml` next to the workflow file first, then in the current working directory. First hit wins. If neither location has one and the workflow needs a registry, the CLI surfaces the load-time error and exits non-zero.
 
+See [MCP.md](MCP.md) for integration semantics including registry format, retry behavior, and prompt-injection posture.
+
 ## Precondition
 
 A step may declare a `precondition` mapping that gates whether it is reachable based on prior-step output. The grammar has exactly two predicates — never compounded, never coerced.
