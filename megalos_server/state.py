@@ -12,6 +12,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from . import db, errors
+from .errors import SessionNotFoundError
 from .identity import ANONYMOUS_IDENTITY
 
 COMPLETE = "__complete__"
@@ -230,7 +231,7 @@ def get_session(session_id: str) -> dict:
         (session_id,),
     ).fetchone()
     if row is None:
-        raise KeyError(f"Session not found: {session_id}")
+        raise SessionNotFoundError()
     return _row_to_session(row)
 
 
@@ -260,7 +261,7 @@ def update_session(session_id: str, **kwargs: object) -> None:
             params,
         )
         if cur.rowcount == 0:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
 
 
 def list_sessions() -> list[dict]:
@@ -325,7 +326,7 @@ def invalidate_steps_after(session_id: str, step_ids: list[str]) -> None:
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         step_data = json.loads(row[0])
         for sid in step_ids:
             step_data.pop(sid, None)
@@ -349,7 +350,7 @@ def clear_step_data_key(session_id: str, key: str) -> None:
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         step_data = json.loads(row[0])
         step_data.pop(key, None)
         conn.execute(
@@ -366,7 +367,7 @@ def increment_retry(session_id: str, step_id: str) -> int:
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         retry_counts = json.loads(row[0])
         count = retry_counts.get(step_id, 0) + 1
         retry_counts[step_id] = count
@@ -385,7 +386,7 @@ def increment_visit(session_id: str, step_id: str) -> int:
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         visits = json.loads(row[0])
         count = visits.get(step_id, 0) + 1
         visits[step_id] = count
@@ -405,7 +406,7 @@ def set_escalation(session_id: str, guardrail_id: str, message: str) -> None:
             (payload, _now_iso(), session_id),
         )
         if cur.rowcount == 0:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
 
 
 def set_called_session(
@@ -430,7 +431,7 @@ def set_called_session(
             (child_session_id, _now_iso(), parent_session_id),
         )
         if cur.rowcount == 0:
-            raise KeyError(f"Session not found: {parent_session_id}")
+            raise SessionNotFoundError()
         if child_session_id is not None and call_step_id is not None:
             conn.execute(
                 "UPDATE session_stack SET call_step_id = ? WHERE session_id = ?",
@@ -737,7 +738,7 @@ def store_artifact(session_id: str, step_id: str, artifact_id: str, content: str
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         checkpoints = json.loads(row[0])
         checkpoints.setdefault(step_id, {})[artifact_id] = content
         conn.execute(
@@ -754,7 +755,7 @@ def get_artifacts(session_id: str, step_id: str) -> dict:
         (session_id,),
     ).fetchone()
     if row is None:
-        raise KeyError(f"Session not found: {session_id}")
+        raise SessionNotFoundError()
     return json.loads(row[0]).get(step_id, {})
 
 
@@ -769,7 +770,7 @@ def delete_session(session_id: str) -> dict:
             (session_id,),
         ).fetchone()
         if row is None:
-            raise KeyError(f"Session not found: {session_id}")
+            raise SessionNotFoundError()
         conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM session_stack WHERE session_id = ?", (session_id,))
     return _row_to_session(row)

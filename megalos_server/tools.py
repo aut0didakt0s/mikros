@@ -15,6 +15,7 @@ from .errors import (
     NO_FRAME_TO_POP,
     SESSION_STACK_FULL,
     SUB_WORKFLOW_PENDING,
+    SessionNotFoundError,
     error_response,
 )
 from .identity_ctx import caller_identity_var
@@ -255,17 +256,22 @@ def _check_str(value: object, name: str, *, required: bool = False) -> dict | No
 
 
 def _trap_errors(field: str = "unknown"):
-    """Decorator: convert KeyError → session_not_found, TypeError/ValueError → invalid_argument."""
+    """Decorator: convert SessionNotFoundError → session_not_found, TypeError/ValueError → invalid_argument.
+
+    Message text is constructed from the exception type, never from str(e), to
+    avoid leaking the raw session_id capability token into the error envelope.
+    The fingerprint goes into the structured session_fingerprint key instead.
+    """
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-            except KeyError as e:
+            except SessionNotFoundError:
                 sid = kwargs.get("session_id") or (args[0] if args and isinstance(args[0], str) else None)
                 return error_response(
                     "session_not_found",
-                    str(e),
+                    "session not found",
                     session_fingerprint=_fp(sid) if sid else None,
                 )
             except (TypeError, ValueError) as e:
@@ -303,9 +309,9 @@ def _resolve_session(session_id, workflows):
     Phase G bearer-auth path drops in without re-architecture."""
     try:
         session = state.get_session(session_id)
-    except KeyError as e:
+    except SessionNotFoundError:
         return None, error_response(
-            "session_not_found", str(e), session_fingerprint=_fp(session_id)
+            "session_not_found", "session not found", session_fingerprint=_fp(session_id)
         )
     caller_identity = caller_identity_var.get()
     if caller_identity != session["owner_identity"]:
@@ -1311,7 +1317,7 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
             parent_sid = state.parent_of(session_id)
             try:
                 parent_session = state.get_session(parent_sid) if parent_sid else None
-            except KeyError:
+            except SessionNotFoundError:
                 parent_session = None
             parent_current_step = parent_session.get("current_step", "") if parent_session else ""
             return error_response(
@@ -1358,7 +1364,7 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
             if called_sid:
                 try:
                     state.delete_session(called_sid)
-                except KeyError:
+                except SessionNotFoundError:
                     pass  # Child already gone; clear link anyway.
                 state.set_called_session(session_id, None)
                 retained_child_deleted = called_sid
@@ -1734,7 +1740,7 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
         # here. Structurally a no-op today under ANONYMOUS_IDENTITY both sides.
         try:
             _owner_session = state.get_session(session_id)
-        except KeyError:
+        except SessionNotFoundError:
             _owner_session = None
         if _owner_session is not None:
             caller_identity = caller_identity_var.get()
@@ -1752,7 +1758,7 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
             parent_sid = state.parent_of(session_id)
             try:
                 parent_session = state.get_session(parent_sid) if parent_sid else None
-            except KeyError:
+            except SessionNotFoundError:
                 parent_session = None
             parent_current_step = parent_session.get("current_step", "") if parent_session else ""
             return error_response(
@@ -1767,9 +1773,9 @@ def register_tools(mcp, workflows, registry: Registry | None = None):
             )
         try:
             deleted = state.delete_session(session_id)
-        except KeyError as e:
+        except SessionNotFoundError:
             return error_response(
-                "session_not_found", str(e), session_fingerprint=_fp(session_id)
+                "session_not_found", "session not found", session_fingerprint=_fp(session_id)
             )
         return {
             "session_id": deleted["session_id"],

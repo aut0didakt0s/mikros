@@ -36,10 +36,12 @@ def test_update_session_persists_step_data_and_current_step():
     assert s["current_step"] == "second"
 
 
-def test_missing_session_raises_key_error():
-    with pytest.raises(KeyError):
+def test_missing_session_raises_session_not_found_error():
+    from megalos_server.errors import SessionNotFoundError
+
+    with pytest.raises(SessionNotFoundError):
         state.get_session("nope")
-    with pytest.raises(KeyError):
+    with pytest.raises(SessionNotFoundError):
         state.update_session("nope", current_step="x")
 
 

@@ -30,6 +30,19 @@ FRAME_TYPE_NOT_POPPABLE = "frame_type_not_poppable"
 NO_FRAME_TO_POP = "no_frame_to_pop"
 CROSS_SESSION_ACCESS_DENIED = "cross_session_access_denied"
 
+
+class SessionNotFoundError(Exception):
+    """Raised by state.py when a session_id does not resolve to a row.
+
+    Carries no message payload. Callers (tools._trap_errors, _resolve_session,
+    delete_session) must construct the envelope message from the exception
+    type, never from str(e), to avoid leaking the raw session_id capability
+    token into the error.message field. The session_fingerprint is the
+    log-safe identifier for the missing session; it is set as a structured
+    key by the caller, not embedded in the message text.
+    """
+
+
 CONTENT_MAX = 262_144
 ARTIFACT_MAX = 1_048_576
 YAML_MAX = 512_000

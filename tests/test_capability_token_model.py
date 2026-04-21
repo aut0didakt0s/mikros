@@ -161,13 +161,10 @@ def test_error_responses_carry_fingerprint_not_session_id(tool_name, args_builde
     """Every session-scoped tool's error envelope must carry session identity
     as `session_fingerprint`, never as raw `session_id` as a dict KEY.
 
-    Note on the `error` message body: a companion xfail test documents that
-    `session_not_found` payloads today embed the raw session_id inside the
-    free-text `error` message (via ``KeyError`` → ``str(e)`` →
-    ``f"Session not found: {session_id}"``). That is a distinct leak surface
-    from the dict-key contract this test enforces, and is tracked separately
-    so fixing it is a scoped follow-up rather than a silent precondition of
-    this test."""
+    Companion `test_error_message_text_omits_raw_session_id` verifies the
+    same property for the free-text `error` message body — catching leaks
+    where interpolation (f-string / format / concat) would have embedded the
+    raw session_id token into the envelope text."""
     real_sid = _start_session()  # exercised only to satisfy builders that ignore it
     args = args_builder(real_sid)
     result = call_tool(tool_name, args)
@@ -181,20 +178,6 @@ def test_error_responses_carry_fingerprint_not_session_id(tool_name, args_builde
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Structural bug surfaced by the capability-token model tests: "
-        "session-scoped tools hitting session_not_found wrap KeyError via "
-        "_trap_errors (and _resolve_session) with str(e), which expands to "
-        "'Session not found: <raw session_id>'. The `session_fingerprint` "
-        "key is present and correct, but the free-text `error` message "
-        "still embeds the raw capability token. This is a scoped follow-up "
-        "to T04; no fix is in scope here — the xfail documents the property "
-        "that SHOULD hold and will be flipped to a passing assertion when "
-        "the error-message construction is fingerprinted."
-    ),
-    strict=True,
-)
 @pytest.mark.parametrize(
     "tool_name,args_builder",
     [
@@ -212,9 +195,11 @@ def test_error_responses_carry_fingerprint_not_session_id(tool_name, args_builde
     ],
 )
 def test_error_message_text_omits_raw_session_id(tool_name, args_builder):
-    """Intended contract (xfail today): the raw session_id must not appear
-    anywhere in the serialized error envelope, including the `error` message
-    body. See the xfail reason for the specific call site."""
+    """The raw session_id must not appear anywhere in the serialized error
+    envelope, including the `error` message text. Caught via `SessionNotFoundError`
+    raised by `state.get_session` with no payload; `_trap_errors` and
+    `_resolve_session` construct the message from the exception type, not
+    str(e). The `session_fingerprint` key remains the structured identifier."""
     args = args_builder()
     result = call_tool(tool_name, args)
     fabricated = args["session_id"]

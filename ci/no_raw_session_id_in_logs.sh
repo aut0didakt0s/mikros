@@ -39,6 +39,30 @@ grep -RnE --include='*.py' \
   'error_response\([^)]*\b(session_id|parent_session_id|child_session_id|root_session_id)=' \
   "$SRC" >>"$tmp" || true
 
+# --- Pattern 4: raw session_id interpolated into string values -------------
+# The adversarial test surface (M007/S01/T04) surfaced a leak path Pattern 1-3
+# missed: raw session_id can land in an error envelope's `error.message` text
+# via f-string / .format() / concat interpolation inside exception constructors
+# or return-value strings. Catch the class, not just dict-key leaks.
+#
+# Matches:
+#   - f-strings: f"...{session_id}..." or f"...{session.some_id}..."
+#   - .format(...) calls with session_id as arg
+#   - string concatenation: "str" + session_id OR session_id + "str"
+#
+# Allowlist: a line-trailing pragma comment `# noqa: session-id-leak` suppresses
+# the flag for explicit exceptions. There should be zero legitimate cases; the
+# pragma exists as an escape hatch for cases that reviewers deliberately accept.
+grep -RnE --include='*.py' \
+  'f["'"'"'][^"'"'"']*\{[^}]*\bsession_id\b' \
+  "$SRC" | grep -v '# noqa: session-id-leak' >>"$tmp" || true
+grep -RnE --include='*.py' \
+  '\.format\([^)]*\bsession_id\b' \
+  "$SRC" | grep -v '# noqa: session-id-leak' >>"$tmp" || true
+grep -RnE --include='*.py' \
+  '(\bsession_id\s*\+\s*["'"'"']|["'"'"']\s*\+\s*\bsession_id\b)' \
+  "$SRC" | grep -v '# noqa: session-id-leak' >>"$tmp" || true
+
 # --- Pattern 3: error-shaped dict literals with raw session_id keys ---------
 # Catches `"status": "validation_error"` / `"status": "error"` dict literals
 # that carry `"session_id": ...` as a field. We look for the key on a line
