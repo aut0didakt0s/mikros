@@ -197,6 +197,10 @@ No conditional `normalize_session_id` microbenchmark was added: the
 notable fraction of the median, and the plan is explicit that the
 microbench is conditional, not speculative.
 
+## Known Issues
+
+- **`bench_concurrent_sessions_gather10` — known flake under cross-round session accumulation.** The benchmark's 10-way gather interacts with the 5-session cap when pytest-benchmark rolls multiple rounds without teardown; `start_workflow` returns a `session_cap_exceeded` envelope (no `session_id` field) and the benchmark's unguarded `r["session_id"]` surfaces a `KeyError`. Typically passes on immediate re-run from a fresh process. Investigation and fix (defensive response read + per-iteration cleanup, or cap-bump fixture) tracked separately.
+
 ## Dev-vs-Production Comparison
 
 **Snapshot.** Captured against `megalos-writing.fastmcp.app` (Fork B,
