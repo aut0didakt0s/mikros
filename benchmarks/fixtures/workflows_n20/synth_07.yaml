@@ -1,0 +1,13 @@
+# Synthetic catalog-scaling fixture for bench_list_workflows_n20.
+# Single step, bare schema — keeps iter cost isolated from load cost.
+name: synth_07
+description: Synthetic benchmark workflow 07.
+category: bench
+output_format: text
+
+steps:
+  - id: only
+    title: Only step
+    directive_template: Stub directive.
+    gates: [done]
+    anti_patterns: [none]
