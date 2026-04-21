@@ -68,6 +68,7 @@ from .ratelimit import (
     emit_rate_limit_warn,
     hash_ip,
 )
+from .session_canon import normalize_session_id
 from .state import _compute_fingerprint
 
 
@@ -172,7 +173,17 @@ class RateLimitMiddleware(Middleware):
         # Only gate on session_id when it's a non-empty string. Pydantic
         # validation (ValidationErrorMiddleware) rejects non-string values
         # later; the limiter must not key a bucket on a dict/list/None.
-        session_id = raw_sid if isinstance(raw_sid, str) and raw_sid else None
+        # Then run through the shared canonicaliser so the bucket key matches
+        # the canonical form the DB (state.py) uses — see
+        # megalos_server/session_canon.py. Empty-after-normalise short-
+        # circuits to None so the limiter skips the session axis for it
+        # (normalize-then-check semantics: " " would pass the raw-truthiness
+        # guard but collapse to "").
+        if isinstance(raw_sid, str) and raw_sid:
+            normalised = normalize_session_id(raw_sid)
+            session_id = normalised if normalised else None
+        else:
+            session_id = None
 
         denied: tuple[str, float] | None = None
 

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from . import db, errors
 from .errors import SessionNotFoundError
 from .identity import ANONYMOUS_IDENTITY
+from .session_canon import normalize_session_id
 
 COMPLETE = "__complete__"
 
@@ -144,7 +145,13 @@ def create_session(
     Lone session = depth 0; one push = depth 1; at depth N==max_stack_depth,
     the next push is rejected.
     """
-    sid = secrets.token_urlsafe(32)
+    if parent_session_id is not None:
+        parent_session_id = normalize_session_id(parent_session_id)
+    # Freshly-minted sid is URL-safe base64 but still gets folded through the
+    # canonicaliser so the DB row key is always the canonical form. Every
+    # lookup below runs its argument through the same canonicaliser — write
+    # and read agree on what "same session" means.
+    sid = normalize_session_id(secrets.token_urlsafe(32))
     now = _now_iso()
     empty = "{}"
     cap = errors.get_session_cap()
@@ -225,6 +232,7 @@ def create_session(
 def get_session(session_id: str) -> dict:
     """Get session by ID. Returns a DETACHED snapshot — mutations to the returned
     dict do NOT persist. Raises KeyError if not found."""
+    session_id = normalize_session_id(session_id)
     conn = db._get_conn()
     row = conn.execute(
         f"SELECT {_SELECT_COLS} FROM sessions WHERE session_id = ?",
@@ -241,6 +249,7 @@ def update_session(session_id: str, **kwargs: object) -> None:
     Accepted kwargs: current_step (str), step_data (dict). Unspecified columns
     are left untouched. Setting current_step to COMPLETE also stamps completed_at.
     """
+    session_id = normalize_session_id(session_id)
     set_clauses: list[str] = []
     params: list[object] = []
     if "current_step" in kwargs:
@@ -320,6 +329,7 @@ def clear_sessions() -> None:
 
 def invalidate_steps_after(session_id: str, step_ids: list[str]) -> None:
     """Delete step_data entries for the given step IDs."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT step_data FROM sessions WHERE session_id = ?",
@@ -344,6 +354,7 @@ def clear_step_data_key(session_id: str, key: str) -> None:
     propagated child artifact lives at step_data[target], so the target's own
     key must be cleared too. Raises KeyError if session not found.
     """
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT step_data FROM sessions WHERE session_id = ?",
@@ -361,6 +372,7 @@ def clear_step_data_key(session_id: str, key: str) -> None:
 
 def increment_retry(session_id: str, step_id: str) -> int:
     """Increment and return retry count for a step."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT retry_counts FROM sessions WHERE session_id = ?",
@@ -380,6 +392,7 @@ def increment_retry(session_id: str, step_id: str) -> int:
 
 def increment_visit(session_id: str, step_id: str) -> int:
     """Increment and return visit count for a step."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT step_visit_counts FROM sessions WHERE session_id = ?",
@@ -399,6 +412,7 @@ def increment_visit(session_id: str, step_id: str) -> int:
 
 def set_escalation(session_id: str, guardrail_id: str, message: str) -> None:
     """Set escalation flag on a session."""
+    session_id = normalize_session_id(session_id)
     payload = json.dumps({"guardrail_id": guardrail_id, "message": message})
     with db.transaction() as conn:
         cur = conn.execute(
@@ -425,6 +439,9 @@ def set_called_session(
 
     Raises KeyError if parent not found.
     """
+    parent_session_id = normalize_session_id(parent_session_id)
+    if child_session_id is not None:
+        child_session_id = normalize_session_id(child_session_id)
     with db.transaction() as conn:
         cur = conn.execute(
             "UPDATE sessions SET called_session = ?, updated_at = ? WHERE session_id = ?",
@@ -477,6 +494,8 @@ def push_frame(
     (a root_session_id must refer to the top-level session; push_frame
     computes depth as one greater than the deepest existing frame for that
     root, or 1 if the stack is empty)."""
+    root_session_id = normalize_session_id(root_session_id)
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT COALESCE(MAX(depth), 0) FROM session_stack WHERE root_session_id = ?",
@@ -495,6 +514,7 @@ def pop_frame(session_id: str) -> dict | None:
     """Remove the frame whose session_id matches. Returns the removed row dict
     (session_id, root_session_id, depth, frame_type, call_step_id, created_at)
     or None if no frame existed for that session."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT session_id, root_session_id, depth, frame_type, call_step_id, created_at "
@@ -509,6 +529,7 @@ def pop_frame(session_id: str) -> dict | None:
 
 def peek_frame(root_session_id: str) -> dict | None:
     """Return the topmost (max depth) frame for the given root, or None if empty."""
+    root_session_id = normalize_session_id(root_session_id)
     conn = db._get_conn()
     row = conn.execute(
         "SELECT session_id, root_session_id, depth, frame_type, call_step_id, created_at "
@@ -520,6 +541,7 @@ def peek_frame(root_session_id: str) -> dict | None:
 
 def stack_depth(root_session_id: str) -> int:
     """Return the number of frames sitting above root_session_id (0 if none)."""
+    root_session_id = normalize_session_id(root_session_id)
     conn = db._get_conn()
     row = conn.execute(
         "SELECT COUNT(*) FROM session_stack WHERE root_session_id = ?",
@@ -537,6 +559,7 @@ def top_frame_for(session_id: str) -> dict | None:
     For a framed child at depth N, 'above it' is the frame at depth N+1 in
     the same root chain.
     """
+    session_id = normalize_session_id(session_id)
     conn = db._get_conn()
     own = conn.execute(
         "SELECT root_session_id, depth FROM session_stack WHERE session_id = ?",
@@ -562,6 +585,7 @@ def own_frame(session_id: str) -> dict | None:
     if session_id is a root (no stack row). Sibling of parent_of / top_frame_for
     that answers 'what kind of frame am I?' uniformly for call and digression frames.
     """
+    session_id = normalize_session_id(session_id)
     conn = db._get_conn()
     row = conn.execute(
         "SELECT session_id, root_session_id, depth, frame_type, call_step_id, created_at "
@@ -575,6 +599,7 @@ def parent_of(session_id: str) -> str | None:
     """Return the session_id of the frame (or root) immediately below session_id.
     Returns None if session_id is a root (no frame row).
     """
+    session_id = normalize_session_id(session_id)
     conn = db._get_conn()
     own = conn.execute(
         "SELECT root_session_id, depth FROM session_stack WHERE session_id = ?",
@@ -655,6 +680,7 @@ def full_stack(root_session_id: str) -> list[dict]:
     'no stack at all' signal should check whether the queried session is itself
     in any chain before calling this.
     """
+    root_session_id = normalize_session_id(root_session_id)
     conn = db._get_conn()
     rows = conn.execute(
         "SELECT session_id, root_session_id, depth, frame_type, call_step_id, created_at "
@@ -732,6 +758,7 @@ def expire_sessions(ttl_hours: int = 24) -> list[str]:
 
 def store_artifact(session_id: str, step_id: str, artifact_id: str, content: str) -> None:
     """Store a checkpointed artifact for a step."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             "SELECT artifact_checkpoints FROM sessions WHERE session_id = ?",
@@ -749,6 +776,7 @@ def store_artifact(session_id: str, step_id: str, artifact_id: str, content: str
 
 def get_artifacts(session_id: str, step_id: str) -> dict:
     """Get all checkpointed artifacts for a step. Returns empty dict if none."""
+    session_id = normalize_session_id(session_id)
     conn = db._get_conn()
     row = conn.execute(
         "SELECT artifact_checkpoints FROM sessions WHERE session_id = ?",
@@ -764,6 +792,7 @@ def delete_session(session_id: str) -> dict:
 
     Also removes any session_stack frame for the deleted session (child
     termination implies the frame that represented it is gone too)."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         row = conn.execute(
             f"SELECT {_SELECT_COLS} FROM sessions WHERE session_id = ?",
@@ -778,6 +807,7 @@ def delete_session(session_id: str) -> dict:
 
 def _set_updated_at_for_test(session_id: str, iso_ts: str) -> None:
     """For tests only: backdate updated_at without touching other columns."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         conn.execute(
             "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
@@ -787,6 +817,7 @@ def _set_updated_at_for_test(session_id: str, iso_ts: str) -> None:
 
 def _set_completed_at_for_test(session_id: str, iso_ts: str) -> None:
     """For tests only: backdate completed_at without touching other columns."""
+    session_id = normalize_session_id(session_id)
     with db.transaction() as conn:
         conn.execute(
             "UPDATE sessions SET completed_at = ? WHERE session_id = ?",

@@ -568,16 +568,11 @@ def test_missing_session_id_skips_session_axis(monkeypatch):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) case-variant session_ids key distinct buckets; no shared "
-    "normalize_session_id today. Remediation PR adds canonicalizer wired "
-    "to both state.py and middleware per T03-PLAN fix-shape guidance.",
-)
 def test_case_variant_session_ids_collapse_to_one_bucket():
-    """Aspirational property: two session_ids differing only in case
-    should key the SAME bucket. Today they do not; fix = shared
-    normalize_session_id called from both layers."""
+    """Property: two session_ids differing only in case key the SAME
+    bucket. Closed by the shared ``normalize_session_id`` canonicaliser
+    wired into the limiter's session axis + the middleware extraction +
+    every state.py entry point — see megalos_server/session_canon.py."""
     clock = FakeClock()
     cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
     limiter = RateLimiter(cfg, monotonic=clock)
@@ -593,16 +588,11 @@ def test_case_variant_session_ids_collapse_to_one_bucket():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) unicode NFC/NFD-equivalent session_ids key distinct "
-    "buckets; no shared normalize_session_id today. Remediation PR adds "
-    "canonicalizer wired to both state.py and middleware per T03-PLAN.",
-)
 def test_unicode_nfc_nfd_variants_collapse_to_one_bucket():
-    """Aspirational property: NFC and NFD encodings of the same glyph
-    string key the SAME bucket. Without shared normalization the
-    byte-distinct encodings key separate buckets."""
+    """Property: NFC and NFD encodings of the same glyph string key the
+    SAME bucket. Closed by the shared ``normalize_session_id`` which
+    NFC-folds before casefold+strip — see
+    megalos_server/session_canon.py."""
     clock = FakeClock()
     cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
     limiter = RateLimiter(cfg, monotonic=clock)
@@ -618,15 +608,11 @@ def test_unicode_nfc_nfd_variants_collapse_to_one_bucket():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) whitespace-trimmed session_id variants key distinct "
-    "buckets; no shared normalize_session_id today. Remediation PR adds "
-    "canonicalizer wired to both state.py and middleware per T03-PLAN.",
-)
 def test_whitespace_variant_session_ids_collapse_to_one_bucket():
-    """Aspirational property: session_ids differing only in leading/
-    trailing whitespace should key the SAME bucket. Today they do not."""
+    """Property: session_ids differing only in leading/trailing whitespace
+    key the SAME bucket. Closed by the shared ``normalize_session_id``
+    which strips as its last step — see
+    megalos_server/session_canon.py."""
     clock = FakeClock()
     cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
     limiter = RateLimiter(cfg, monotonic=clock)
