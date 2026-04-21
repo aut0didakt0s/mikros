@@ -197,6 +197,212 @@ No conditional `normalize_session_id` microbenchmark was added: the
 notable fraction of the median, and the plan is explicit that the
 microbench is conditional, not speculative.
 
-## Dev-vs-Production Comparison [to be populated in S03]
+## Dev-vs-Production Comparison
 
-## Soft Regression Floor Policy [to be populated in S03]
+**Snapshot.** Captured against `megalos-writing.fastmcp.app` (Fork B,
+Horizon-hosted at megalos runtime v0.3.0). Re-run via
+`scripts/perf/horizon_snapshot.py`. See §Horizon Snapshot Runbook
+below for auth setup.
+
+> **Table body:** `[OPERATOR TO CAPTURE POST-MERGE]` — the standalone
+> script lands in this commit but the snapshot itself requires a
+> browser-brokered Horizon-org-member session that is not available in
+> the agent environment that lands this change. The operator will run
+> the script separately and add a follow-up commit populating the row
+> values below. Table header is the stable contract that the script
+> emits; only the three data rows are pending.
+
+| Operation | Samples | RTT floor | Prod median | Prod stddev | Dev median | Server work (prod − RTT) | Ratio (server/dev) |
+|-----------|---------|-----------|-------------|-------------|------------|--------------------------|--------------------|
+| list_workflows | 10 | [pending] | [pending] | [pending] | 654.3 µs | [pending] | [pending] |
+| get_state | 10 | — | [pending] | [pending] | 655.3 µs | [pending] | [pending] |
+| submit_step | 10 | — | [pending] | [pending] | 664.9 µs | [pending] | [pending] |
+
+Dev-median values are pinned to §Baseline Numbers above (captured
+2026-04-21 at commit `1d945ad`). `scripts/perf/horizon_snapshot.py`
+hard-codes the same three values; re-running the snapshot after a
+baseline update requires updating both the script's constants and
+this table.
+
+### Divergence Budget
+
+Expected sources of dev-vs-prod delta, in rough order of contribution:
+
+- **Network RTT** — dev box to Horizon region round-trip. Captured as
+  the RTT floor column (via a prelude of 10 `list_workflows` calls
+  over a TLS-warmed connection). Every "server work" value in the
+  table subtracts this floor so the column isolates actual
+  server-side cost.
+- **TLS handshake** — cold-connect adds a handshake roundtrip.
+  Subsequent calls on a warm connection are cheaper. The script
+  pre-warms via the RTT-floor prelude before the measured passes to
+  minimize this term.
+- **JSON-over-wire overhead** — serialize/deserialize of request and
+  response bodies through FastMCP's HTTP transport. Scales with
+  payload size; dominant for large `get_state` responses on long
+  sessions, negligible for the small payloads this script exercises.
+- **Horizon container overhead** — container runtime plus FastMCP's
+  HTTP transport layer. Fundamentally absent in the in-process
+  benchmarks, so shows up entirely as delta.
+- **Container-disk SQLite** — Horizon's disk is a container volume
+  with different I/O characteristics than a dev laptop SSD. May be
+  faster or slower depending on host. Affects the `submit_step` row
+  more than the read-path rows.
+
+### Interpretation Guidance
+
+Use the budget above before reading into raw dev-vs-prod ratios.
+"Dev 25× faster than prod" is noise — a commodity laptop running
+in-process dispatch against a local SQLite file is expected to beat
+a containerized HTTP deployment across a network round-trip by
+orders of magnitude. That ratio is physics plus the architectural
+difference, not a signal to investigate.
+
+The real signal is **unexpected divergence beyond the budget**: a
+re-capture where the RTT floor is consistent with prior runs but
+one operation's server-work column jumps by a large factor, or a
+stddev that widens substantially on a path that used to be stable.
+That is the pattern worth investigating — a code change that added
+latency on one tool surface without affecting others, or a
+dependency-version bump that altered one subpath's performance
+profile.
+
+### Horizon Snapshot Runbook
+
+**Auth setup.** Horizon free-tier org-auth is mandatory (see
+`SECURITY.md#deployment-forks` and `.megalos/DECISIONS.md` entry
+dated 2026-04-14 "Fork B"). Headless CLI invocations of
+`scripts/perf/horizon_snapshot.py` return 401 because:
+
+- Raw Prefect account keys (`pnu_*`) are not Horizon access tokens
+  and 401 as expired on the megalos endpoint.
+- The browser OAuth consent flow succeeds but the
+  `fastmcp.Client` code-for-token exchange 401s because the script
+  is not a registered OAuth app on Horizon's side.
+
+**Workable pattern.** Run the script from a shell where a browser
+or the Horizon CLI has already authenticated and persisted an
+org-member session that `fastmcp.Client` can consume. If a 401
+surfaces, refresh the Horizon session in the browser and retry.
+Matches the same dispatch-only constraint that drove the
+`.github/workflows/mcp-smoke.yml` schedule removal (M007/PR#5).
+
+**Default target.** `https://megalos-writing.fastmcp.app`. All three
+domain endpoints (`megalos-writing`, `megalos-analysis`,
+`megalos-professional`) run the same megalos runtime at v0.3.0;
+pick one and stick with it across re-captures so the numbers are
+comparable over time.
+
+**Post-capture.** Paste the script's stdout markdown table into
+the table block above. Update the snapshot header with the
+capture date, the commit SHA the endpoint was serving at capture
+time, and the endpoint URL if changed. Commit with a message
+describing the capture context (re-capture trigger or initial
+population).
+
+## Soft Regression Floor Policy
+
+### What 'Soft' Means
+
+This policy is **human-reviewed, not machine-enforced**. A future
+CI engineer reading the "~20% threshold" line below could build a
+hard CI gate that fails PRs on benchmark drift. They should not.
+The thresholds below are **trigger points for human review**, not
+failure conditions for automated testing.
+
+The hard CI regression gate is explicitly deferred (see §Hard CI
+Gate — Explicitly Deferred at the bottom of this section) because
+a single baseline snapshot is not robust enough to distinguish
+machine-specific timing variance from real regression. An
+automated enforcement layer on top of a single-point floor would
+either be too tight (flake-prone on thermal and scheduling noise)
+or too loose (misses real regressions). Neither mode is useful.
+
+**Load-bearing framing.** A contributor reviewing a benchmark-drift
+warning must decide whether it is a hardware-class change requiring
+re-capture or a real regression requiring investigation. That
+decision is not mechanizable on one data point. Build the
+multi-point floor before building the gate.
+
+### Per-Benchmark Thresholds
+
+Any benchmark whose median drifts by **more than ~20%** versus the
+§Baseline Numbers table triggers human review. Not automated
+failure — review triggers a judgment call:
+
+- **Legitimate drift** — hardware upgrade, interpreter minor
+  version change, OS major upgrade on the benchmark host. Remedy:
+  re-capture the baseline per §Re-Capture Triggers and record the
+  trigger in the commit message that updates the baseline.
+- **Potential regression** — no obvious environment change, or a
+  known hot-path milestone change coincides with the drift.
+  Remedy: investigate. If the drift is confirmed as a regression,
+  remediation lands as a follow-up task or milestone — **never
+  revert the baseline to hide a regression**.
+
+~20% is chosen as tier-one stability. Tighter thresholds (e.g.
+~5% or ~10%) fire on thermal throttling, scheduler jitter, and
+GC-pause variance that produce flake-fatigue without surfacing
+real issues. The §Baseline Numbers stddev widths on the sub-ms
+paths (`list_workflows`, `get_state`, `submit_step`) exceed 5% of
+their medians already — a 5% threshold would alert on every run.
+
+### Re-Capture Triggers
+
+Re-capture §Baseline Numbers (and re-run the Horizon snapshot if
+relevant) when any of the following fires:
+
+- **Hot-path milestone change** — a milestone that modifies any
+  of: the middleware chain, `megalos_server/state.py` write path,
+  the rate limiter, session_id canonicalization, the sub-workflow
+  stack, or the workflow loader.
+- **Dependency version bump** — `fastmcp`, `pyyaml`, or
+  `jsonschema` at the major or minor version level. Patch bumps
+  do not trigger; they are assumed bug-fix-only by semver.
+- **Interpreter version change** — Python minor version change on
+  the benchmark host (e.g., 3.12 → 3.13).
+- **OS upgrade on benchmark host** — major macOS or Linux version
+  upgrade where the baseline was originally captured. Patch-level
+  security updates do not trigger.
+
+Re-capture **replaces** the previous baseline; there is no archive
+of prior baselines in this document. The git history of this file
+is the archive — previous commits carry earlier baselines under
+their own SHA, and re-capture commit messages record the trigger
+(hot-path change / dependency bump / interpreter change / OS
+upgrade) so the chain is reconstructible.
+
+### Judgment-Call Override
+
+Thresholds are a trigger point, not an enforcement mechanism.
+Legitimate drift (hardware upgrade, interpreter change, OS
+upgrade) is acceptable; the remedy is **re-capture**, not
+revert. The reviewer documents the judgment call in the commit
+message that updates the baseline: which trigger fired, what the
+environment delta was, and — where relevant — confirmation that
+the drift direction matches the expected direction of the
+environment change.
+
+A "drift direction sanity check" is a useful discipline: a
+hardware upgrade that produces *slower* medians is a surprise
+worth investigating before accepting the new baseline; the same
+upgrade producing *faster* medians is the expected case and
+needs less scrutiny.
+
+### Hard CI Gate — Explicitly Deferred
+
+**Deferred:** a hard CI-enforced regression gate that fails PRs
+on benchmark median drift beyond a configured threshold.
+
+**Why:** A single dev-box baseline is insufficient for automatic
+enforcement — one snapshot cannot distinguish machine-specific
+timing variance from real regression. Automated enforcement on a
+single-snapshot floor would either be too tight (flake-prone) or
+too loose (misses real regressions), and neither mode is useful.
+
+**When:** A follow-up milestone introduces the hard gate once
+multiple baseline snapshots (collected over time, and potentially
+across different benchmark hosts) inform the floor. That
+milestone will define the noise envelope and a statistical
+threshold grounded in multi-point variance, not a single-point
+cutoff.
