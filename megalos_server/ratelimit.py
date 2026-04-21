@@ -231,6 +231,17 @@ class RateLimiter:
         Returns ``(allowed, retry_after_ms)``. On allow, retry_after_ms is 0.
         On deny, retry_after_ms is the milliseconds until enough tokens
         refill to cover the request.
+
+        **Contract:** on the session axis, ``key`` must already be in
+        canonical form (produced by ``session_canon.normalize_session_id``).
+        This function does NOT self-normalise — normalisation is the
+        caller's responsibility, performed once at the layer boundary
+        (state.py entry points, middleware session_id extraction). A
+        single normalisation site per boundary means drift between
+        layers surfaces loudly through the adversarial bypass tests,
+        rather than being silently masked here. See
+        ``test_try_consume_session_axis_requires_canonical_key`` for the
+        test-documented version of this contract.
         """
         if axis not in _AXES:
             raise ValueError(f"unknown axis: {axis}")

@@ -278,3 +278,62 @@ def test_token_bucket_is_plain_dataclass():
     b = TokenBucket(capacity=5.0, refill_rate=1.0, tokens=5.0, last_refill=0.0)
     assert b.capacity == 5.0
     assert b.tokens == 5.0
+
+
+def test_try_consume_session_axis_requires_canonical_key():
+    """Contract: ``try_consume`` does NOT self-normalise session-axis keys.
+
+    The limiter is byte-exact on keys. Callers (state.py entry points,
+    middleware session_id extraction) are the single source of truth for
+    canonicalisation, performed once at the layer boundary via
+    ``session_canon.normalize_session_id``. Internal normalisation here
+    would silently mask caller-layer drift — neutralising the adversarial
+    bypass tests as a forcing function the moment a future caller forgets
+    to normalise.
+
+    This test documents the contract twofold:
+
+    (1) Non-canonical variants key DISTINCT buckets. ``"ABC"`` and
+        ``"abc"`` are bypass-equivalent under ``normalize_session_id``,
+        but the limiter treats them as separate buckets — proving the
+        absence of self-normalisation. Callers that pass non-canonical
+        keys will suffer a real divergence, not a silent correction.
+
+    (2) Canonical keys round-trip (idempotence). For any canonical input
+        ``k`` (where ``k == normalize_session_id(k)``), the limiter's
+        bucket for ``k`` is identical to its bucket for
+        ``normalize_session_id(k)`` — the contract-satisfying path.
+    """
+    from megalos_server.session_canon import normalize_session_id
+
+    clock = FakeClock()
+    limiter = RateLimiter(
+        RateLimitConfig(session_burst=2.0, session_rate=0.0),
+        monotonic=clock,
+    )
+
+    non_canon = "ABC"
+    canon = normalize_session_id(non_canon)
+    assert non_canon != canon, (
+        "test sentinel: expected ABC to differ from its canonical form"
+    )
+
+    # (1) Distinct buckets under non-canonical input.
+    limiter.try_consume(AXIS_SESSION, non_canon)  # "ABC" bucket: 2 -> 1
+    limiter.try_consume(AXIS_SESSION, non_canon)  # "ABC" bucket: 1 -> 0
+    allowed_after_burst, _ = limiter.try_consume(AXIS_SESSION, non_canon)
+    assert allowed_after_burst is False, "ABC bucket should be empty after burst"
+    # "abc" (canonical form) has its OWN full bucket — no silent correction.
+    allowed_canon, _ = limiter.try_consume(AXIS_SESSION, canon)
+    assert allowed_canon is True, (
+        "contract violated: limiter silently normalised non-canonical key"
+    )
+
+    # (2) Canonical-key idempotence: calling with canonical input twice
+    # keys the same bucket both times.
+    assert normalize_session_id(canon) == canon  # canon is a fixed point
+    limiter.try_consume(AXIS_SESSION, canon)  # "abc" bucket: 1 -> 0
+    allowed_canon_exhausted, _ = limiter.try_consume(AXIS_SESSION, canon)
+    assert allowed_canon_exhausted is False, (
+        "canonical bucket should be exhausted — proves repeat-call keys same bucket"
+    )

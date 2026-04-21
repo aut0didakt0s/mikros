@@ -568,73 +568,118 @@ def test_missing_session_id_skips_session_axis(monkeypatch):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) case-variant session_ids key distinct buckets; no shared "
-    "normalize_session_id today. Remediation PR adds canonicalizer wired "
-    "to both state.py and middleware per T03-PLAN fix-shape guidance.",
-)
+# ---------------------------------------------------------------------------
+# Minimal spy/stub plumbing for middleware-layer bypass tests.
+#
+# The primitive is byte-exact by contract (see
+# test_try_consume_session_axis_requires_canonical_key in
+# test_ratelimit_primitive.py). The LAYER where normalisation happens is
+# the middleware. To prove the bypass is closed at that layer — and to
+# make failures loud if the middleware ever stops normalising (the
+# forcing-function property) — these tests exercise
+# RateLimitMiddleware.on_call_tool directly with a spy limiter that
+# records the key passed to try_consume.
+# ---------------------------------------------------------------------------
+
+
+class _SpyLimiter:
+    """Records (axis, key, cost); allows every call."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int]] = []
+
+    def try_consume(self, axis: str, key: str, cost: int = 1) -> tuple[bool, float]:
+        self.calls.append((axis, key, cost))
+        return (True, 0.0)
+
+
+class _StubFastMCPContext:
+    def __init__(self, transport: str = "stdio") -> None:
+        self.transport = transport
+
+    def set_state(self, key: str, value: Any) -> None:  # pragma: no cover - unused
+        pass
+
+
+class _StubMessage:
+    def __init__(self, name: str, arguments: dict[str, Any]) -> None:
+        self.name = name
+        self.arguments = arguments
+
+
+class _StubMiddlewareContext:
+    def __init__(self, message: _StubMessage, transport: str = "stdio") -> None:
+        self.message = message
+        self.fastmcp_context = _StubFastMCPContext(transport=transport)
+
+
+async def _noop_call_next(_ctx: Any) -> str:
+    return "ok"
+
+
+def _dispatch(mw: RateLimitMiddleware, sid: str, tool: str = "get_state") -> None:
+    ctx = _StubMiddlewareContext(
+        message=_StubMessage(name=tool, arguments={"session_id": sid}),
+        transport="stdio",
+    )
+    asyncio.run(mw.on_call_tool(ctx, _noop_call_next))  # type: ignore[arg-type]
+
+
+def _session_keys(spy: _SpyLimiter) -> list[str]:
+    return [key for axis, key, _ in spy.calls if axis == AXIS_SESSION]
+
+
 def test_case_variant_session_ids_collapse_to_one_bucket():
-    """Aspirational property: two session_ids differing only in case
-    should key the SAME bucket. Today they do not; fix = shared
-    normalize_session_id called from both layers."""
-    clock = FakeClock()
-    cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
-    limiter = RateLimiter(cfg, monotonic=clock)
-    a = "AbcDef123"
-    b = "abcdef123"
-    ok_a, _ = limiter.try_consume(AXIS_SESSION, a)
-    assert ok_a
-    # Under the aspirational property, this should deny — same logical
-    # identity, bucket already drained.
-    ok_b, _ = limiter.try_consume(AXIS_SESSION, b)
-    assert ok_b is False, (
-        "case variants must collapse to one bucket under shared normalization"
+    """Property: two session_ids differing only in case produce the SAME
+    bucket key after middleware session_id extraction.
+
+    Exercised at the MIDDLEWARE layer (the normalisation site). The
+    primitive is byte-exact by contract; this test fails loudly if the
+    middleware ever stops calling ``normalize_session_id`` — the
+    forcing-function property that keeps a single source of truth."""
+    spy = _SpyLimiter()
+    mw = RateLimitMiddleware(spy)  # type: ignore[arg-type]
+    _dispatch(mw, "AbcDef123")
+    _dispatch(mw, "abcdef123")
+    keys = _session_keys(spy)
+    assert len(keys) == 2
+    assert keys[0] == keys[1], (
+        "middleware must normalise session_id before consulting limiter — "
+        "case variants produced distinct bucket keys"
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) unicode NFC/NFD-equivalent session_ids key distinct "
-    "buckets; no shared normalize_session_id today. Remediation PR adds "
-    "canonicalizer wired to both state.py and middleware per T03-PLAN.",
-)
 def test_unicode_nfc_nfd_variants_collapse_to_one_bucket():
-    """Aspirational property: NFC and NFD encodings of the same glyph
-    string key the SAME bucket. Without shared normalization the
-    byte-distinct encodings key separate buckets."""
-    clock = FakeClock()
-    cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
-    limiter = RateLimiter(cfg, monotonic=clock)
-    # 'café' — NFC single codepoint vs NFD e + combining acute.
+    """Property: NFC and NFD encodings of the same glyph string produce
+    the SAME bucket key after middleware session_id extraction. See
+    module docstring on why the test lives at the middleware layer."""
+    spy = _SpyLimiter()
+    mw = RateLimitMiddleware(spy)  # type: ignore[arg-type]
     nfc = unicodedata.normalize("NFC", "caf\u00e9")
     nfd = unicodedata.normalize("NFD", "cafe\u0301")
     assert nfc != nfd, "test setup invariant: byte-distinct encodings"
-    ok_nfc, _ = limiter.try_consume(AXIS_SESSION, nfc)
-    assert ok_nfc
-    ok_nfd, _ = limiter.try_consume(AXIS_SESSION, nfd)
-    assert ok_nfd is False, (
-        "NFC/NFD variants must collapse to one bucket under shared normalization"
+    _dispatch(mw, nfc)
+    _dispatch(mw, nfd)
+    keys = _session_keys(spy)
+    assert len(keys) == 2
+    assert keys[0] == keys[1], (
+        "middleware must NFC-fold session_id — NFC/NFD variants produced "
+        "distinct bucket keys"
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="(f) whitespace-trimmed session_id variants key distinct "
-    "buckets; no shared normalize_session_id today. Remediation PR adds "
-    "canonicalizer wired to both state.py and middleware per T03-PLAN.",
-)
 def test_whitespace_variant_session_ids_collapse_to_one_bucket():
-    """Aspirational property: session_ids differing only in leading/
-    trailing whitespace should key the SAME bucket. Today they do not."""
-    clock = FakeClock()
-    cfg = RateLimitConfig(session_rate=0.001, session_burst=1.0)
-    limiter = RateLimiter(cfg, monotonic=clock)
-    ok_a, _ = limiter.try_consume(AXIS_SESSION, "abc123")
-    assert ok_a
-    ok_b, _ = limiter.try_consume(AXIS_SESSION, " abc123\t")
-    assert ok_b is False, (
-        "whitespace variants must collapse to one bucket under shared normalization"
+    """Property: session_ids differing only in leading/trailing whitespace
+    produce the SAME bucket key after middleware session_id extraction."""
+    spy = _SpyLimiter()
+    mw = RateLimitMiddleware(spy)  # type: ignore[arg-type]
+    _dispatch(mw, "abc123")
+    _dispatch(mw, " abc123\t")
+    keys = _session_keys(spy)
+    assert len(keys) == 2
+    assert keys[0] == keys[1], (
+        "middleware must strip whitespace from session_id — variants "
+        "produced distinct bucket keys"
     )
 
 
