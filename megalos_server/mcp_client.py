@@ -284,7 +284,6 @@ async def _call_with_validation_async(
                 "server": server_name,
                 "tool": tool,
                 "cache_hit": True,
-                "inputschema_fetch_ms": 0.0,
             },
         )
 

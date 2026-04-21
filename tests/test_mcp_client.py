@@ -148,19 +148,8 @@ def test_schema_validation_error(mcp_stub_server, request) -> None:  # type: ign
     outcome = mcp_client.call(
         "stub", "schema_required", {"count": "not-an-int"}, reg
     )
-    # FastMCP server-side pydantic validation currently surfaces as a
-    # tool-execution error (server catches ValidationError and raises
-    # ToolError). We accept either SchemaValidationError (if the server
-    # ever maps it to INVALID_PARAMS) or ToolExecutionError whose message
-    # mentions validation — the behavior class is "caller's args rejected",
-    # which both variants encode.
-    assert isinstance(outcome, (SchemaValidationError, ToolExecutionError)), outcome
-    detail = (
-        outcome.detail
-        if isinstance(outcome, SchemaValidationError)
-        else outcome.message
-    )
-    assert "count" in detail.lower() or "valid" in detail.lower() or "int" in detail.lower()
+    assert isinstance(outcome, SchemaValidationError), outcome
+    assert "count" in outcome.detail.lower() or "int" in outcome.detail.lower()
 
 
 def test_timeout(mcp_stub_server, request) -> None:  # type: ignore[no-untyped-def]  # noqa: F811
