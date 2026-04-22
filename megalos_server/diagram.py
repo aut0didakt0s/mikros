@@ -198,3 +198,30 @@ def render(workflow_path: str | Path) -> str:
         if call is not None:
             lines.append(call)
     return "\n".join(lines)
+
+
+def main() -> None:
+    """CLI entry point: render a workflow YAML as Mermaid to stdout.
+
+    Imports ``argparse`` and ``sys`` locally so programmatic callers of
+    ``render()`` (tests, other tools) do not pay the argparse parse-time
+    cost at import time — this module is library-first, CLI-second.
+    """
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        prog="python -m megalos_server.diagram",
+        description="Render a workflow YAML as a Mermaid flowchart TD block.",
+    )
+    parser.add_argument("workflow", help="path to workflow YAML file")
+    args = parser.parse_args()
+    try:
+        print(render(args.workflow))
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
