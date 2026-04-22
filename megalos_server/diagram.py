@@ -6,10 +6,13 @@ workflow YAML path, returns a string suitable for pasting into a
 
 Current scope: sequential step-to-step rendering, branch edges with
 condition labels, optional ``default_branch`` fallback edges, a
-visually distinct node shape for ``mcp_tool_call`` steps, and a dotted
+visually distinct node shape for ``mcp_tool_call`` steps, a dotted
 gating edge from the source step to any step carrying a ``precondition``
-(``when_equals`` or ``when_present``). Sub-workflow ``call`` subgraph
-references and CLI wiring are handled in later slices.
+(``when_equals`` or ``when_present``), and named references to child
+workflows invoked via ``call`` (an empty ``subgraph <child>\\nend`` block
+plus a labeled ``|"calls"|`` edge from the parent step). Child internals
+are never inlined — pointing ``render()`` at the child YAML is how a
+reader inspects its steps. CLI wiring is handled in a later slice.
 """
 
 from pathlib import Path
@@ -135,12 +138,48 @@ def _precondition_edge(step: dict[str, Any]) -> str | None:
     return f'    {source_sid} -. "when {last_seg} {tail}" .-> {step["id"]}'
 
 
+def _call_references(steps: list[dict[str, Any]]) -> list[str]:
+    """Render empty ``subgraph`` blocks for every distinct ``call`` target.
+
+    A step with ``call: <child>`` delegates to a separate workflow YAML;
+    the diagram references it by name and never inlines its steps. Same
+    child called N times emits exactly one reference block (dedupe);
+    per-call edges are emitted per-step by ``_call_edge``. Insertion
+    order of first occurrence is preserved for deterministic output.
+    """
+    seen: dict[str, None] = {}
+    for step in steps:
+        target = step.get("call") if isinstance(step, dict) else None
+        if target and target not in seen:
+            seen[target] = None
+    lines: list[str] = []
+    for target in seen:
+        lines.append(f"subgraph {target}")
+        lines.append("end")
+    return lines
+
+
+def _call_edge(step: dict[str, Any]) -> str | None:
+    """Render the ``|"calls"|`` edge for a step carrying ``call: <child>``.
+
+    Additive to linear / branch / default_branch / precondition edges.
+    Returns ``None`` when the step does not declare ``call``.
+    """
+    target = step.get("call")
+    if not target:
+        return None
+    return f'    {step["id"]} -->|"calls"| {target}'
+
+
 def render(workflow_path: str | Path) -> str:
     """Render a workflow YAML as a Mermaid ``flowchart TD`` block.
 
     Returns a string starting with the dialect declaration
-    (``flowchart TD``) followed by node declarations and edges.
-    Raises ``ValueError`` if the workflow fails validation.
+    (``flowchart TD``) followed by node declarations, any child-workflow
+    reference blocks (one per distinct ``call`` target, deduped), and
+    then all edges (linear, branch, default-branch, dotted precondition,
+    and ``|"calls"|`` call edges). Raises ``ValueError`` if the workflow
+    fails validation.
     """
     doc = _load_doc(workflow_path)
     steps = doc["steps"]
@@ -148,10 +187,14 @@ def render(workflow_path: str | Path) -> str:
     lines: list[str] = ["flowchart TD", ""]
     for step in steps:
         lines.append(_node_line(step))
+    lines.extend(_call_references(steps))
     for index, step in enumerate(steps):
         next_step = steps[index + 1] if index + 1 < len(steps) else None
         lines.extend(_edge_lines(step, next_step))
         dotted = _precondition_edge(step)
         if dotted is not None:
             lines.append(dotted)
+        call = _call_edge(step)
+        if call is not None:
+            lines.append(call)
     return "\n".join(lines)

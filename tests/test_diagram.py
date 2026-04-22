@@ -241,3 +241,72 @@ def test_precondition_dotted_edge_source_matches_ref(fixture: Path) -> None:
         gated_sid = step["id"]
         assert f"{source_sid} -." in out
         assert f".-> {gated_sid}" in out
+
+
+# --- Sub-workflow call rendering --------------------------------------------
+
+# Parents that declare ``call: <child>`` on at least one step. Both are
+# single-call parents (call_context_from_parent calls one child; cascade_wrap
+# calls one child); the dedupe assertion is a unit-level invariant the
+# implementation must still hold.
+CALL_FIXTURES = [
+    FIXTURES / "call_context_from_parent.yaml",
+    FIXTURES / "cascade_wrap_parent.yaml",
+]
+
+
+@pytest.mark.parametrize("fixture", CALL_FIXTURES, ids=lambda p: p.name)
+def test_call_step_has_calls_edge(fixture: Path) -> None:
+    """Every step with ``call: <child>`` emits a ``|"calls"|`` edge from
+    the parent step's id to the child workflow name."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    for step in doc["steps"]:
+        if isinstance(step, dict) and "call" in step:
+            target = step["call"]
+            assert f'{step["id"]} -->|"calls"| {target}' in out
+
+
+@pytest.mark.parametrize("fixture", CALL_FIXTURES, ids=lambda p: p.name)
+def test_call_target_reference_present_exactly_once(fixture: Path) -> None:
+    """Each distinct ``call`` target appears exactly once as a child
+    reference (either a ``subgraph <target>`` block or a stadium
+    ``<target>(("…"))`` node). N calls to the same child still emit one
+    reference; the decision register records which shape the
+    implementation chose."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    call_targets = {
+        step["call"]
+        for step in doc["steps"]
+        if isinstance(step, dict) and "call" in step
+    }
+    for target in call_targets:
+        subgraph_marker = f"subgraph {target}"
+        stadium_marker = f'{target}(("'
+        assert out.count(subgraph_marker) + out.count(stadium_marker) == 1
+
+
+@pytest.mark.parametrize("fixture", CALL_FIXTURES, ids=lambda p: p.name)
+def test_child_steps_not_inlined(fixture: Path) -> None:
+    """Child workflows are referenced, not inlined. Their own step ids
+    must NOT appear as nodes in the parent render. This is the guarantee
+    the subgraph/stadium choice exists to provide."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    call_targets = {
+        step["call"]
+        for step in doc["steps"]
+        if isinstance(step, dict) and "call" in step
+    }
+    for target in call_targets:
+        child_path = fixture.parent / f"{target.split('.')[-1]}.yaml"
+        if not child_path.exists():
+            continue
+        child_doc = yaml.safe_load(child_path.read_text())
+        for child_step in child_doc["steps"]:
+            cid = child_step["id"] if isinstance(child_step, dict) else None
+            if cid and cid != target:
+                # A child step id should NOT render as a node in the parent.
+                assert f'    {cid}["' not in out
+                assert f'    {cid}[["' not in out
