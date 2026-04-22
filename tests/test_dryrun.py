@@ -14,11 +14,14 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "workflows"
 CANONICAL_FIXTURE = FIXTURES_DIR / "canonical.yaml"
 
 
-def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(
+    args: list[str], input: str | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "megalos_server.dryrun", *args],
         capture_output=True,
         text=True,
+        input=input,
     )
 
 
@@ -35,24 +38,14 @@ def test_nonexistent_path_errors_cleanly(tmp_path: Path) -> None:
     assert "Workflow file not found" in result.stderr
 
 
-def test_bootstrap_loads_canonical_fixture(tmp_path: Path) -> None:
-    # Copy canonical.yaml into an isolated dir so sibling fixtures in
-    # tests/fixtures/workflows/ don't influence load behaviour.
-    target = tmp_path / "canonical.yaml"
-    shutil.copy(CANONICAL_FIXTURE, target)
-    result = _run([str(target)])
-    assert result.returncode == 0, result.stderr
-    assert "Bootstrap OK" in result.stdout
-    assert "canonical" in result.stdout
-
-
 def test_no_sessions_db_writes(tmp_path: Path) -> None:
+    # canonical.yaml has 3 steps; see tests/fixtures/workflows/canonical.yaml
     target = tmp_path / "canonical.yaml"
     shutil.copy(CANONICAL_FIXTURE, target)
     sessions_db = Path("server/megalos_sessions.db")
     pre_exists = sessions_db.exists()
     pre_stat = sessions_db.stat() if pre_exists else None
-    result = _run([str(target)])
+    result = _run([str(target)], input="ok\n" * 3)
     assert result.returncode == 0, result.stderr
     if pre_exists:
         assert sessions_db.exists()
@@ -113,3 +106,23 @@ def test_broken_target_produces_framed_error(tmp_path: Path) -> None:
     # Target path in framing + workflow name in raw exception.
     assert str(target.parent) in result.stderr
     assert "bad_target" in result.stderr
+
+
+def test_canonical_fixture_runs_end_to_end(tmp_path: Path) -> None:
+    target = tmp_path / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    # canonical.yaml has 3 steps; see tests/fixtures/workflows/canonical.yaml
+    result = _run([str(target)], input="ok\nok\nok\n")
+    assert result.returncode == 0, result.stderr
+    assert "alpha" in result.stdout
+    assert "bravo" in result.stdout
+    assert "charlie" in result.stdout
+    assert "Workflow complete" in result.stdout
+
+
+def test_stdin_eof_exits_nonzero(tmp_path: Path) -> None:
+    target = tmp_path / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    result = _run([str(target)], input="")
+    assert result.returncode != 0
+    assert "Dry-run aborted by user (EOF)" in result.stderr
