@@ -1,8 +1,9 @@
 """CLI entry point for the megálos dry-run inspector.
 
-Step through a workflow without calling an LLM. T01 bootstraps the process
-(env-var discipline, production workflow loader reuse via ``create_app``)
-and stops at "Bootstrap OK"; the REPL loop lands in T02.
+Step through a workflow without calling an LLM. Bootstrap (env-var
+discipline, production workflow loader reuse via ``create_app``) is
+followed by a REPL loop that drives ``start_workflow`` + ``submit_step``
+through ``app.call_tool`` until the workflow completes or errors.
 """
 
 # 1. Env var set BEFORE any megalos_server.* import.
@@ -12,6 +13,7 @@ os.environ.setdefault("MEGALOS_DB_PATH", ":memory:")
 
 # 2. Stdlib imports.
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -77,9 +79,58 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Step 5 — Bootstrap-OK handoff.
-    print(f"Bootstrap OK: workflow '{target_name}' loaded from {target.parent}")
-    sys.exit(0)
+    # Step 5 — REPL loop: drive start_workflow + submit_step via app.call_tool.
+    # FastMCP types call_tool's .structured_content as Optional[dict]; megálos
+    # tools always return a dict envelope, so assert-narrow at each call site.
+    result = asyncio.run(
+        mcp.call_tool(
+            "start_workflow",
+            {"workflow_type": target_name, "context": args.context},
+        )
+    ).structured_content
+    assert result is not None
+    envelope = result
+    session_id = envelope["session_id"]
+
+    while True:
+        # Terminal success.
+        if envelope.get("status") == "workflow_complete":
+            print("\n=== Workflow complete ===")
+            print(envelope.get("message", ""))
+            sys.exit(0)
+
+        # Error envelope — narrow: T02 handles status == "error" only.
+        if envelope.get("status") == "error":
+            print(f"code: {envelope.get('code', '')}", file=sys.stderr)
+            print(f"error: {envelope.get('error', '')}", file=sys.stderr)
+            sys.exit(1)
+
+        # Active-step envelope: print banner + directive, prompt, submit.
+        # start_workflow returns "current_step"; submit_step returns "next_step".
+        # Read whichever is present; the REPL treats them uniformly as "the active step".
+        active = envelope.get("current_step") or envelope["next_step"]
+        directive = envelope["directive"]
+        print(f"\n=== Step: {active['id']} — {active['title']} ===")
+        print(directive)
+        print()
+        try:
+            response = input("> ")
+        except EOFError:
+            print("Dry-run aborted by user (EOF)", file=sys.stderr)
+            sys.exit(1)
+
+        result = asyncio.run(
+            mcp.call_tool(
+                "submit_step",
+                {
+                    "session_id": session_id,
+                    "step_id": active["id"],
+                    "content": response,
+                },
+            )
+        ).structured_content
+        assert result is not None
+        envelope = result
 
 
 if __name__ == "__main__":
