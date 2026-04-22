@@ -22,6 +22,7 @@ from .errors import (
 from .identity_ctx import caller_identity_var
 from .mcp_registry import Registry
 from .state import COMPLETE as _COMPLETE
+from .state import WORKFLOW_CHANGED as _WORKFLOW_CHANGED
 from .state import _compute_fingerprint as _fp
 
 _DEFAULT_MAX_RETRIES = 3
@@ -295,7 +296,27 @@ def _find_step(workflow, step_id):
     return -1, None
 
 
-def _resolve_session(session_id, workflows):
+def _workflow_changed_envelope(session: dict, current_fp: str) -> dict:
+    """Build the ADR-001 `workflow_changed` error envelope.
+
+    Four diagnostic keys: session_fingerprint, workflow_type,
+    previous_fingerprint, current_fingerprint. Message text fixed —
+    clients match on the error code, not the prose. See
+    docs/adr/001-workflow-versioning.md § Envelope shape.
+    """
+    workflow_type = session["workflow_type"]
+    return error_response(
+        "workflow_changed",
+        f"Workflow '{workflow_type}' has changed since this session was started. "
+        "The session is terminal; start a new one.",
+        session_fingerprint=session["fingerprint"],
+        workflow_type=workflow_type,
+        previous_fingerprint=session["workflow_fingerprint"],
+        current_fingerprint=current_fp,
+    )
+
+
+def _resolve_session(session_id, workflows, workflow_fingerprints=None):
     """Look up session and its workflow. Returns (session, wf) or (None, error_dict).
 
     Single planting site for the caller/owner identity access-check: the
@@ -305,9 +326,24 @@ def _resolve_session(session_id, workflows):
     this helper, so the check is present for all of them without threading
     a ctx parameter through every tool signature.
 
-    Today both sides carry ANONYMOUS_IDENTITY so the check is structurally a
-    no-op; the emission path is kept covered by test_identity_seam.py so the
-    Phase G bearer-auth path drops in without re-architecture."""
+    Also the single planting site for ADR-001's workflow-mismatch funnel
+    (see docs/adr/001-workflow-versioning.md). After identity + workflow-
+    presence checks, the session's stamped fingerprint is compared against
+    the live map. Mismatch writes __workflow_changed__ to current_step and
+    returns the typed envelope. Already-terminal sessions short-circuit
+    without re-hashing. The pre-versioning sentinel is handled naturally:
+    any real digest differs from the literal string.
+
+    Today both sides carry ANONYMOUS_IDENTITY so the identity check is
+    structurally a no-op; the emission path is kept covered by
+    test_identity_seam.py so the Phase G bearer-auth path drops in without
+    re-architecture.
+
+    workflow_fingerprints: optional map of workflow name -> fingerprint
+    (populated at create_app time, threaded through register_tools). When
+    None, the fingerprint re-check is skipped — used by primitive-level
+    helpers that already have a resolved workflow and bypass this funnel.
+    """
     try:
         session = state.get_session(session_id)
     except SessionNotFoundError:
@@ -321,6 +357,12 @@ def _resolve_session(session_id, workflows):
             f"caller identity does not own session {session['fingerprint']}",
             session_fingerprint=session["fingerprint"],
         )
+    # Fast path: session is already in the terminal workflow_changed state.
+    # Emit the envelope without touching the workflow map or re-hashing.
+    if session["current_step"] == _WORKFLOW_CHANGED:
+        return None, _workflow_changed_envelope(
+            session, current_fp=session["workflow_fingerprint"]
+        )
     wf = workflows.get(session["workflow_type"])
     if not wf:
         return None, error_response(
@@ -328,6 +370,14 @@ def _resolve_session(session_id, workflows):
             f"Workflow '{session['workflow_type']}' not loaded",
             session_fingerprint=session["fingerprint"],
         )
+    # Fingerprint re-check. Missing map (legacy helper caller) skips. Missing
+    # entry for this workflow name is defensive — workflow was present one
+    # line up, so the map is simply out of sync; treat as skip.
+    if workflow_fingerprints is not None:
+        current_fp = workflow_fingerprints.get(session["workflow_type"])
+        if current_fp is not None and session["workflow_fingerprint"] != current_fp:
+            state.update_session(session_id, current_step=_WORKFLOW_CHANGED)
+            return None, _workflow_changed_envelope(session, current_fp=current_fp)
     return (session, wf), None
 
 
@@ -524,7 +574,10 @@ def _wrap_child_failure_into_parent_escalation(
 
 
 def _resume_parent_after_digression(
-    child_session: dict, workflows: dict, registry: Registry | None = None
+    child_session: dict,
+    workflows: dict,
+    registry: Registry | None = None,
+    workflow_fingerprints: dict[str, str] | None = None,
 ) -> dict:
     """Digression-frame completion: pop frame, delete child, hand next-step directive
     back to the outer session. No artifact propagation (digression-frames have no
@@ -535,7 +588,9 @@ def _resume_parent_after_digression(
     outer_sid = state.parent_of(child_sid)
     assert outer_sid is not None, "resume_parent_after_digression called on a root session"
 
-    outer_resolved, err = _resolve_session(outer_sid, workflows)
+    outer_resolved, err = _resolve_session(
+        outer_sid, workflows, workflow_fingerprints=workflow_fingerprints
+    )
     if err:
         return err
     outer_session, outer_wf = outer_resolved
@@ -583,6 +638,7 @@ def _auto_resume_on_top_frame_complete(
     child_wf: dict,
     workflows: dict,
     registry: Registry | None = None,
+    workflow_fingerprints: dict[str, str] | None = None,
 ) -> dict:
     """Frame-type dispatch on child completion. Reads the child's own frame row to
     decide: 'call' → propagate artifact to parent via M004 semantics; 'digression'
@@ -592,8 +648,19 @@ def _auto_resume_on_top_frame_complete(
     own = state.own_frame(child_session["session_id"])
     frame_type = own["frame_type"] if own else "call"  # defensive default matches M004
     if frame_type == "digression":
-        return _resume_parent_after_digression(child_session, workflows, registry=registry)
-    return _propagate_to_parent(child_session, child_wf, workflows, registry=registry)
+        return _resume_parent_after_digression(
+            child_session,
+            workflows,
+            registry=registry,
+            workflow_fingerprints=workflow_fingerprints,
+        )
+    return _propagate_to_parent(
+        child_session,
+        child_wf,
+        workflows,
+        registry=registry,
+        workflow_fingerprints=workflow_fingerprints,
+    )
 
 
 def _propagate_to_parent(
@@ -601,6 +668,7 @@ def _propagate_to_parent(
     child_wf: dict,
     workflows: dict,
     registry: Registry | None = None,
+    workflow_fingerprints: dict[str, str] | None = None,
 ) -> dict:
     """Bridge: child completed → propagate final artifact to parent, advance parent.
 
@@ -616,7 +684,9 @@ def _propagate_to_parent(
     last_step_id = child_wf["steps"][-1]["id"]
     artifact = child_session["step_data"].get(last_step_id, "")
 
-    parent_resolved, err = _resolve_session(parent_sid, workflows)
+    parent_resolved, err = _resolve_session(
+        parent_sid, workflows, workflow_fingerprints=workflow_fingerprints
+    )
     if err:
         # Parent vanished mid-flight — defense in depth. Return the error;
         # child stays at _COMPLETE retained.
@@ -837,7 +907,9 @@ def register_tools(
         err = _check_str(session_id, "session_id", required=True)
         if err:
             return err
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, wf = resolved
@@ -889,19 +961,14 @@ def register_tools(
         err = _check_str(session_id, "session_id", required=True)
         if err:
             return err
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, wf = resolved
 
         _, step = _find_step(wf, session["current_step"])
-        if not step:
-            return error_response(
-                "schema_violation",
-                f"Step '{session['current_step']}' not found in workflow",
-                session_fingerprint=session["fingerprint"],
-            )
-
         return {
             "session_id": session_id,
             "current_step": {"id": step["id"], "title": step["title"]},
@@ -925,7 +992,9 @@ def register_tools(
         )
         if err:
             return err
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, wf = resolved
@@ -1156,6 +1225,7 @@ def register_tools(
                     wf,
                     workflows,
                     registry=registry,
+                    workflow_fingerprints=workflow_fingerprints,
                 )
 
             result: dict = {
@@ -1313,6 +1383,7 @@ def register_tools(
                 wf,
                 workflows,
                 registry=registry,
+                workflow_fingerprints=workflow_fingerprints,
             )
 
         result = {
@@ -1354,7 +1425,9 @@ def register_tools(
         err = _check_str(session_id, "session_id", required=True) or _check_str(step_id, "step_id", required=True)
         if err:
             return err
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, wf = resolved
@@ -1446,7 +1519,9 @@ def register_tools(
         if err:
             return err
 
-        resolved, err = _resolve_session(parent_session_id, workflows)
+        resolved, err = _resolve_session(
+            parent_session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         parent_session, parent_wf = resolved
@@ -1577,7 +1652,9 @@ def register_tools(
         if err:
             return err
 
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         outer_session, _outer_wf = resolved
@@ -1745,7 +1822,9 @@ def register_tools(
         if err:
             return err
 
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, _wf = resolved
@@ -1783,7 +1862,9 @@ def register_tools(
         # Happy path: digression frame at depth >= 1. Delegate to the same
         # resume helper the auto-resume-on-complete path uses so clients see
         # byte-compatible response shapes across both transitions.
-        return _resume_parent_after_digression(session, workflows, registry=registry)
+        return _resume_parent_after_digression(
+            session, workflows, registry=registry, workflow_fingerprints=workflow_fingerprints
+        )
 
     @mcp.tool()
     @_trap_errors()
@@ -1860,7 +1941,9 @@ def register_tools(
         err = _check_str(session_id, "session_id", required=True) or _check_str(output_format, "output_format")
         if err:
             return err
-        resolved, err = _resolve_session(session_id, workflows)
+        resolved, err = _resolve_session(
+            session_id, workflows, workflow_fingerprints=workflow_fingerprints
+        )
         if err:
             return err
         session, wf = resolved
