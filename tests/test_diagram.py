@@ -1,7 +1,10 @@
-"""Tests for megalos_server.diagram — sequential workflow renderer.
+"""Tests for megalos_server.diagram — workflow renderer.
 
-T01 scope covers only linear step-to-step rendering. Parametrized so T02
-can add branching fixtures without restructuring.
+Covers linear step-to-step rendering, branch edges with condition
+labels, ``default_branch`` fallback edges, and a visually distinct
+node shape for ``mcp_tool_call`` steps. Parametrized so later slices
+can add fixtures (preconditions, sub-workflow ``call``) without
+restructuring.
 """
 
 from pathlib import Path
@@ -92,3 +95,83 @@ def test_render_emits_one_edge_per_consecutive_pair(
     out = render(path)
     expected_edges = len(doc["steps"]) - 1
     assert out.count(" --> ") == expected_edges
+
+
+# --- Branch rendering -------------------------------------------------------
+
+BRANCH_FIXTURES = [
+    FIXTURES / "demo_branching.yaml",
+]
+
+
+@pytest.mark.parametrize("fixture", BRANCH_FIXTURES, ids=lambda p: p.name)
+def test_branch_conditions_appear_as_edge_labels(fixture: Path) -> None:
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    for step in doc["steps"]:
+        for branch in step.get("branches", []):
+            raw = branch["condition"]
+            escaped = raw.replace('"', "&quot;")
+            assert raw in out or escaped in out
+
+
+@pytest.mark.parametrize("fixture", BRANCH_FIXTURES, ids=lambda p: p.name)
+def test_default_branch_emits_unlabeled_edge(fixture: Path) -> None:
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    for step in doc["steps"]:
+        if "default_branch" in step:
+            assert f"{step['id']} --> {step['default_branch']}" in out
+
+
+@pytest.mark.parametrize("fixture", BRANCH_FIXTURES, ids=lambda p: p.name)
+def test_branched_step_suppresses_linear_fall_through(fixture: Path) -> None:
+    """A step with ``branches`` must not also emit a linear
+    ``id --> next_step_id`` edge; branches are the outgoing edges."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    steps = doc["steps"]
+    for index, step in enumerate(steps):
+        if "branches" not in step:
+            continue
+        if index + 1 >= len(steps):
+            continue
+        next_id = steps[index + 1]["id"]
+        linear = f"{step['id']} --> {next_id}"
+        # Labeled edges contain the pipe delimiter; the linear form does not.
+        assert linear not in out or next_id == step.get("default_branch")
+
+
+# --- mcp_tool_call visual distinction ---------------------------------------
+
+MCP_FIXTURES = [
+    FIXTURES / "mcp_tool_call" / "success_then_read.yaml",
+]
+
+
+@pytest.mark.parametrize("fixture", MCP_FIXTURES, ids=lambda p: p.name)
+def test_mcp_tool_call_steps_have_distinct_marker(fixture: Path) -> None:
+    """mcp_tool_call steps render in a shape distinct from LLM rectangles.
+    Asserts presence of EITHER preferred marker adjacent to the step id
+    (subroutine ``[[`` or hexagon ``{{``) without pinning which one — the
+    specific choice is recorded in the decisions register."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    for step in doc["steps"]:
+        if step.get("action") == "mcp_tool_call":
+            sid = step["id"]
+            assert f"{sid}[[" in out or f"{sid}{{{{" in out
+
+
+@pytest.mark.parametrize("fixture", MCP_FIXTURES, ids=lambda p: p.name)
+def test_non_mcp_steps_keep_rectangle_shape(fixture: Path) -> None:
+    """LLM steps in an mcp_tool_call fixture still render as plain
+    rectangles — the distinct shape is scoped to mcp_tool_call only."""
+    doc = yaml.safe_load(fixture.read_text())
+    out = render(fixture)
+    for step in doc["steps"]:
+        if step.get("action") == "mcp_tool_call":
+            continue
+        sid = step["id"]
+        assert f'{sid}["' in out
+        assert f"{sid}[[" not in out

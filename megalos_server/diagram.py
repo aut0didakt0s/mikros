@@ -4,12 +4,15 @@ Static analyzer — no runtime, no registry, no side effects. Takes a
 workflow YAML path, returns a string suitable for pasting into a
 ```mermaid fenced code block on GitHub.
 
-T01 scope: sequential step-to-step rendering only. Branches, preconditions,
-sub-workflow ``call`` steps, and the ``mcp_tool_call`` visual distinction
-are deliberately OUT OF SCOPE — later tasks handle those.
+Current scope: sequential step-to-step rendering, branch edges with
+condition labels, optional ``default_branch`` fallback edges, and a
+visually distinct node shape for ``mcp_tool_call`` steps. Preconditions,
+sub-workflow ``call`` subgraph references, and CLI wiring are handled
+in later slices.
 """
 
 from pathlib import Path
+from typing import Any
 
 from .schema import validate_workflow
 
@@ -21,17 +24,18 @@ _REGISTRY_REQUIRED_CODE = "mcp_tool_call_registry_required"
 
 
 def _escape_label(text: str) -> str:
-    """Escape a node label for Mermaid's quoted-string form.
+    """Escape a label for Mermaid's quoted-string form.
 
-    Mermaid's ``id["label"]`` form tolerates most punctuation; the one
-    character that breaks parsing is the literal double-quote. Replace
-    with ``&quot;`` — the stable Mermaid convention accepted by GitHub's
-    renderer.
+    Mermaid's ``id["label"]`` and ``-->|"label"|`` forms tolerate most
+    punctuation; the one character that breaks parsing is the literal
+    double-quote. Replace with ``&quot;`` — the stable Mermaid
+    convention accepted by GitHub's renderer. Used for both node
+    labels and edge labels.
     """
     return text.replace('"', "&quot;")
 
 
-def _load_doc(workflow_path: str | Path) -> dict:
+def _load_doc(workflow_path: str | Path) -> dict[str, Any]:
     """Validate + parse workflow YAML, tolerating the registry-required error.
 
     See module docstring for rationale — diagram rendering must work on
@@ -49,21 +53,60 @@ def _load_doc(workflow_path: str | Path) -> dict:
     return doc
 
 
+def _node_line(step: dict[str, Any]) -> str:
+    """Render a single node declaration.
+
+    ``mcp_tool_call`` steps use Mermaid's subroutine shape
+    (``id[["label"]]``) to signal "delegates to an external tool".
+    All other steps use the pinned rectangle shape (``id["label"]``).
+    """
+    sid = step["id"]
+    label = _escape_label(step["title"])
+    if step.get("action") == "mcp_tool_call":
+        return f'    {sid}[["{label}"]]'
+    return f'    {sid}["{label}"]'
+
+
+def _edge_lines(step: dict[str, Any], next_step: dict[str, Any] | None) -> list[str]:
+    """Render outgoing edges for a single step.
+
+    - ``branches`` present → one labeled edge per entry, plus an
+      unlabeled edge to ``default_branch`` when that field is set.
+      The linear fall-through edge is suppressed (branches ARE the
+      outgoing edges).
+    - ``branches`` absent → one linear edge to the next step in the
+      ``steps`` list, or nothing if this is the last step.
+    """
+    sid = step["id"]
+    branches = step.get("branches")
+    if branches:
+        lines = [
+            f'    {sid} -->|"{_escape_label(b["condition"])}"| {b["next"]}'
+            for b in branches
+        ]
+        default_branch = step.get("default_branch")
+        if default_branch:
+            lines.append(f"    {sid} --> {default_branch}")
+        return lines
+    if next_step is None:
+        return []
+    return [f"    {sid} --> {next_step['id']}"]
+
+
 def render(workflow_path: str | Path) -> str:
     """Render a workflow YAML as a Mermaid ``flowchart TD`` block.
 
-    Returns a string starting with the dialect declaration (``flowchart TD``)
-    followed by one line per node declaration and one line per edge between
-    consecutive steps. Raises ``ValueError`` if the workflow fails validation.
+    Returns a string starting with the dialect declaration
+    (``flowchart TD``) followed by node declarations and edges.
+    Raises ``ValueError`` if the workflow fails validation.
     """
     doc = _load_doc(workflow_path)
     steps = doc["steps"]
 
     lines: list[str] = ["flowchart TD", ""]
     for step in steps:
-        sid = step["id"]
-        label = _escape_label(step["title"])
-        lines.append(f'    {sid}["{label}"]')
-    for prev, curr in zip(steps, steps[1:]):
-        lines.append(f"    {prev['id']} --> {curr['id']}")
+        lines.append(_node_line(step))
+    for index, step in enumerate(steps):
+        next_step = steps[index + 1] if index + 1 < len(steps) else None
+        lines.extend(_edge_lines(step, next_step))
     return "\n".join(lines)
