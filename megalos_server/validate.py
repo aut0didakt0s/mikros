@@ -40,6 +40,14 @@ def main() -> None:
             "working directory."
         ),
     )
+    parser.add_argument(
+        "--diagram",
+        action="store_true",
+        help=(
+            "also emit a Mermaid flowchart of the workflow after successful "
+            "validation. No effect on validation failure."
+        ),
+    )
     args = parser.parse_args()
 
     registry: Registry | None = None
@@ -65,6 +73,10 @@ def main() -> None:
             print(f"ERROR: {err}", file=sys.stderr)
         sys.exit(1)
     print("Valid.")
+    if args.diagram:
+        from .diagram import render
+        print()
+        print(render(args.workflow))
     sys.exit(0)
 
 
