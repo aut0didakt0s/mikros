@@ -1134,6 +1134,633 @@ def test_repl_never_calls_get_state(
     assert "get_state" not in tool_names, tool_names
 
 
+# ---- S04 edge cases: parent_output_schema_fail, state drift, 3-level ------
+
+
+OUTPUT_SCHEMA_FAIL_PARENT_FIXTURE = FIXTURES_DIR / "output_schema_fail_parent.yaml"
+OUTPUT_SCHEMA_FAIL_CHILD_FIXTURE = FIXTURES_DIR / "output_schema_fail_child.yaml"
+
+
+def _copy_output_schema_fail(tmp_path: Path) -> Path:
+    """Copy the schema-failing parent+child into tmp_path, return parent path."""
+    parent = tmp_path / "output_schema_fail_parent.yaml"
+    shutil.copy(OUTPUT_SCHEMA_FAIL_PARENT_FIXTURE, parent)
+    shutil.copy(
+        OUTPUT_SCHEMA_FAIL_CHILD_FIXTURE,
+        tmp_path / "output_schema_fail_child.yaml",
+    )
+    return parent
+
+
+def test_parent_output_schema_fail_decoded(tmp_path: Path) -> None:
+    """Parent call-step carries an output_schema the child's final artifact
+    does NOT satisfy. ``_propagate_to_parent`` builds a ``session_escalated``
+    envelope whose nested ``child_error.reason`` is
+    ``parent_output_schema_fail`` (tools.py lines 712-725). REPL decodes
+    with the child validation errors listed verbatim; exit 1.
+    """
+    target = _copy_output_schema_fail(tmp_path)
+    # Parent: intro (p1) → call-child (p2) → wrap-up (p3, unreachable).
+    # Child: investigate (c1) → emit-freeform (c2).
+    # stdin feeds p1, c1, c2; propagation fires after c2 and should
+    # escalate — no line consumed for p3.
+    stdin = "intro line\ninvestigation notes\nfreeform prose without approval field\n"
+    result = _run([str(target)], input=stdin)
+    assert result.returncode == 1, (result.stdout, result.stderr)
+    err = result.stderr
+    assert (
+        "Sub-workflow 'output_schema_fail_child' completed, but its artifact "
+        "failed parent's output_schema:"
+    ) in err
+    # Validation errors from the child's final artifact (plain prose; the
+    # parent's output_schema requires a JSON object) are surfaced verbatim.
+    # Server's _validate_output reports "Content is not valid JSON: ..." as
+    # the first error when the artifact is non-JSON; assert that line appears
+    # under the decoded header.
+    assert "Content is not valid JSON" in err
+    assert "Parent session escalated." in err
+    # D051: artifact body content must NOT be echoed. The child's freeform
+    # content starts with 'freeform prose' — assert it is not reproduced.
+    assert "freeform prose without approval field" not in err
+
+
+def test_sub_workflow_state_drift_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In-process: inject a ``session_escalated`` envelope that represents
+    ``sub_workflow_state_drift`` (tools.py lines 700-710): no
+    ``called_workflow_error`` wrapper, just ``parent_session_fingerprint``
+    + ``child_session_fingerprint`` at the top level. REPL decodes.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+        # Inject on the submit_step that terminates the child workflow —
+        # i.e. the second submit_step call (intro already submitted, then
+        # descent into child, child gather submitted, child brief would
+        # propagate). Simulate state-drift response on the ``brief`` submit.
+        submit_count = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0 and name == "submit_step":
+                submit_count["n"] += 1
+                if submit_count["n"] == 3:
+                    class _R:
+                        structured_content = {
+                            "status": "error",
+                            "code": "session_escalated",
+                            "error": "parent state drift during sub-workflow propagation",
+                            "parent_session_fingerprint": "parent_fp_abcd",
+                            "child_session_fingerprint": "child_fp_wxyz",
+                        }
+
+                    return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro", "gather", "brief"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    err = captured_err.getvalue()
+    assert "Sub-workflow state drift" in err
+    assert "parent_fp_abcd" in err
+    assert "child_fp_wxyz" in err
+
+
+def _write_three_level_chain(tmp_path: Path) -> Path:
+    """Author a 3-level parent→child→grandchild chain in ``tmp_path``.
+
+    Parent has 3 steps (intro, call-child, final). Child has 3 steps
+    (pre-call, call-grandchild, post-call). Grandchild has 1 step
+    (terminal). Returns the parent path.
+
+    Empirical semantics (see tools.py:733 and tools.py:1222): one frame
+    pops per submit_step call. When the grandchild's terminal step is
+    submitted, the server advances the child past its call-step to
+    ``post-call``; REPL pops the grandchild frame. The child's ``post-call``
+    submission then propagates to the parent, which advances to ``final``;
+    REPL pops the child frame. Two separate pops across two submit_step
+    calls — not a single multi-frame response.
+    """
+    (tmp_path / "grandchild_wf.yaml").write_text(
+        "schema_version: \"0.3\"\n"
+        "name: grandchild_wf\n"
+        "description: Terminal-step grandchild.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: gc_terminal\n"
+        "    title: Grandchild terminal\n"
+        "    directive_template: Emit the grandchild artifact.\n"
+        "    gates:\n"
+        "      - grandchild artifact emitted\n"
+        "    anti_patterns:\n"
+        "      - Leaving grandchild empty\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "child_wf.yaml").write_text(
+        "schema_version: \"0.3\"\n"
+        "name: child_wf\n"
+        "description: Child whose middle step calls a grandchild.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: c_pre\n"
+        "    title: Child pre-call\n"
+        "    directive_template: Prep work before delegating down.\n"
+        "    gates:\n"
+        "      - pre-call done\n"
+        "    anti_patterns:\n"
+        "      - Skipping prep\n"
+        "  - id: c_call\n"
+        "    title: Child delegates to grandchild\n"
+        "    directive_template: Hand off to grandchild.\n"
+        "    gates:\n"
+        "      - grandchild delegated\n"
+        "    anti_patterns:\n"
+        "      - Skipping delegation\n"
+        "    call: grandchild_wf\n"
+        "  - id: c_post\n"
+        "    title: Child post-call\n"
+        "    directive_template: Wrap up after grandchild ascent.\n"
+        "    gates:\n"
+        "      - post-call done\n"
+        "    anti_patterns:\n"
+        "      - Skipping wrap-up\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "parent_wf.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: parent_wf\n"
+        "description: Root parent whose middle step calls the child.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: p_intro\n"
+        "    title: Parent intro\n"
+        "    directive_template: Write the intro.\n"
+        "    gates:\n"
+        "      - intro written\n"
+        "    anti_patterns:\n"
+        "      - Skipping intro\n"
+        "  - id: p_call\n"
+        "    title: Parent delegates to child\n"
+        "    directive_template: Hand off to child.\n"
+        "    gates:\n"
+        "      - child delegated\n"
+        "    anti_patterns:\n"
+        "      - Skipping delegation\n"
+        "    call: child_wf\n"
+        "  - id: p_final\n"
+        "    title: Parent final\n"
+        "    directive_template: Wrap up at root.\n"
+        "    gates:\n"
+        "      - final written\n"
+        "    anti_patterns:\n"
+        "      - Skipping final\n",
+        encoding="utf-8",
+    )
+    return parent
+
+
+def test_nested_descent_three_level_single_frame_pop(tmp_path: Path) -> None:
+    """3-level descent: parent → child → grandchild. Grandchild completion
+    propagates into the child (one pop banner). Child's post-call step is
+    then driven by the operator; child completion propagates into the
+    parent (second pop banner). Two descent banners + two ascent banners
+    across two submit_step calls. Exit 0.
+    """
+    parent = _write_three_level_chain(tmp_path)
+    # stdin: p_intro, c_pre, gc_terminal, c_post, p_final.
+    stdin = "intro\npre work\ngrandchild artifact\npost work\nfinal\n"
+    result = _run([str(parent)], input=stdin)
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    # Two descent banners: parent → child (depth 1 = 2-space indent), then
+    # child → grandchild (depth 2 = 4-space indent).
+    assert "  → Entering sub-workflow 'child_wf'" in out
+    assert "    → Entering sub-workflow 'grandchild_wf'" in out
+    # Two ascent banners: grandchild → child at depth 2 (4-space indent),
+    # then child → parent at depth 1 (2-space indent).
+    assert "    ← Returned from sub-workflow 'grandchild_wf'" in out
+    assert "  ← Returned from sub-workflow 'child_wf'" in out
+    # Exactly one of each banner text (single-frame pop per submit_step).
+    assert out.count("← Returned from sub-workflow 'grandchild_wf'") == 1
+    assert out.count("← Returned from sub-workflow 'child_wf'") == 1
+    # Parent's final step runs.
+    assert "=== Step: p_final" in out
+    assert "Workflow complete" in out
+
+
+def test_workflow_changed_mid_descent_exits_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inject a ``workflow_changed`` envelope on the child's first
+    submit_step while a descent frame is live. REPL must route straight
+    to the terminal decoder (no ascent banner, no parent-resume attempt).
+    The envelope does NOT carry ``propagated_from_sub_workflow``; the
+    dispatch-order comment in dryrun.py pins this contract.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    # Fire on the second submit_step call: first is the parent's intro,
+    # second is the child's first step after auto-descent.
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+        submit_count = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0 and name == "submit_step":
+                submit_count["n"] += 1
+                if submit_count["n"] == 2:
+                    class _R:
+                        structured_content = {
+                            "status": "error",
+                            "code": "workflow_changed",
+                            "error": (
+                                "Workflow 'artifact_inlining_child' has changed "
+                                "since this session was started."
+                            ),
+                            "session_fingerprint": "child_fp_123",
+                            "workflow_type": "artifact_inlining_child",
+                            "previous_fingerprint": "old_fp",
+                            "current_fingerprint": "new_fp",
+                        }
+
+                    return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro", "gather"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_out = io.StringIO()
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_out)
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    out = captured_out.getvalue()
+    # Descent happened BEFORE the injection.
+    assert "→ Entering sub-workflow 'artifact_inlining_child'" in out
+    # No ascent banner: the terminal status fired without ascent pop.
+    assert "← Returned from sub-workflow" not in out
+
+
+def test_call_step_with_branches_auto_takes_default(tmp_path: Path) -> None:
+    """Regression: a parent call-step that declares ``branches`` +
+    ``default_branch`` must NOT prompt the operator for a branch on
+    propagation. ``_advance_parent`` deterministically picks
+    ``default_branch`` server-side (tools.py:480-481); the REPL must not
+    spuriously open a branch prompt on the post-ascent envelope.
+    """
+    shutil.copy(
+        ARTIFACT_INLINING_CHILD_FIXTURE, tmp_path / "artifact_inlining_child.yaml"
+    )
+    parent = tmp_path / "branches_call_parent.yaml"
+    # Step order: alt_wrap appears BEFORE happy_wrap so only the branch
+    # that the call-step's default_branch names is reachable from the
+    # post-propagation envelope — alt_wrap is only reachable via explicit
+    # branch selection, which the regression under test asserts does NOT
+    # happen. happy_wrap is last (no trailing step), so it terminates the
+    # workflow cleanly without accidentally falling into alt_wrap.
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: branches_call_parent\n"
+        "description: Parent whose call-step has branches + default_branch.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: intro\n"
+        "    title: Intro\n"
+        "    directive_template: Intro content.\n"
+        "    gates:\n"
+        "      - intro\n"
+        "    anti_patterns:\n"
+        "      - Skip\n"
+        "  - id: delegate\n"
+        "    title: Delegate with branches\n"
+        "    directive_template: Delegate then route.\n"
+        "    gates:\n"
+        "      - delegated\n"
+        "    anti_patterns:\n"
+        "      - Skip delegation\n"
+        "    call: artifact_inlining_child\n"
+        "    branches:\n"
+        "      - next: happy_wrap\n"
+        "        condition: Default path\n"
+        "      - next: alt_wrap\n"
+        "        condition: Alternative path\n"
+        "    default_branch: happy_wrap\n"
+        "  - id: alt_wrap\n"
+        "    title: Alt wrap-up\n"
+        "    directive_template: Wrap up alt.\n"
+        "    gates:\n"
+        "      - wrapped alt\n"
+        "    anti_patterns:\n"
+        "      - Skip\n"
+        "  - id: happy_wrap\n"
+        "    title: Happy wrap-up\n"
+        "    directive_template: Wrap up happy.\n"
+        "    gates:\n"
+        "      - wrapped\n"
+        "    anti_patterns:\n"
+        "      - Skip\n",
+        encoding="utf-8",
+    )
+    # stdin: intro, gather, brief, happy_wrap content. NO branch selection
+    # line — regression target is the absence of a prompt.
+    stdin = "intro\ngather\nbrief\nhappy\n"
+    result = _run([str(parent)], input=stdin)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    out = result.stdout
+    # default_branch fired automatically: we reach happy_wrap, not alt_wrap.
+    assert "=== Step: happy_wrap" in out
+    assert "=== Step: alt_wrap" not in out
+    # No branch prompt text was emitted — the REPL's branch prompt always
+    # prints a ``Branches:`` header.
+    assert "Branches:" not in out
+
+
+def test_validation_retry_inside_descent(tmp_path: Path) -> None:
+    """Child step with an output_schema inside a live descent: operator
+    submits invalid JSON (re-prompt fires at child depth), then valid
+    (descent continues). Stack stays at child depth through the retry;
+    no ascent banner fires mid-retry. Exit 0.
+    """
+    # Copy demo_validation.yaml (2 steps, first is JSON-validated) as child.
+    shutil.copy(
+        FIXTURES_DIR / "demo_validation.yaml",
+        tmp_path / "demo_validation.yaml",
+    )
+    parent = tmp_path / "retry_parent.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: retry_parent\n"
+        "description: Parent that delegates to the validation-gated child.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: intro\n"
+        "    title: Intro\n"
+        "    directive_template: Intro.\n"
+        "    gates:\n"
+        "      - intro\n"
+        "    anti_patterns:\n"
+        "      - Skip\n"
+        "  - id: delegate\n"
+        "    title: Delegate to validation-gated child\n"
+        "    directive_template: Delegate.\n"
+        "    gates:\n"
+        "      - delegated\n"
+        "    anti_patterns:\n"
+        "      - Skip\n"
+        "    call: demo_validation\n",
+        encoding="utf-8",
+    )
+    # stdin: intro, invalid JSON (triggers child-side re-prompt), valid
+    # JSON, summary line for demo_validation step 2.
+    stdin = (
+        f"intro\n{_INVALID_JSON}\n{_VALID_JSON}\nsummary line\n"
+    )
+    result = _run([str(parent)], input=stdin)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    out = result.stdout
+    err = result.stderr
+    # Descent banner rendered.
+    assert "  → Entering sub-workflow 'demo_validation'" in out
+    # Validation re-prompt fired at child indent (2-space).
+    assert "  Validation failed:" in err
+    # Retry did NOT fire an ascent banner — ascent only follows final-step
+    # submission, which requires the retry to have advanced past the gated step.
+    # The ascent banner for the child does fire at the very end once both
+    # child steps complete; assert it appears exactly once.
+    assert out.count("← Returned from sub-workflow 'demo_validation'") == 1
+    assert "Workflow complete" in out
+
+
+def _write_five_level_chain(tmp_path: Path) -> Path:
+    """Author a 5-level descent chain (A → B → C → D → E). Each inner
+    workflow has exactly one call-step that targets the next one;
+    the leaf (E) is a single terminal step.
+    """
+    (tmp_path / "level_e.yaml").write_text(
+        "schema_version: \"0.3\"\n"
+        "name: level_e\n"
+        "description: Terminal leaf.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: e_terminal\n"
+        "    title: Leaf terminal\n"
+        "    directive_template: Emit leaf.\n"
+        "    gates:\n"
+        "      - leaf\n"
+        "    anti_patterns:\n"
+        "      - Skip\n",
+        encoding="utf-8",
+    )
+    for name, target in (("level_d", "level_e"), ("level_c", "level_d"), ("level_b", "level_c")):
+        (tmp_path / f"{name}.yaml").write_text(
+            f"schema_version: \"0.3\"\n"
+            f"name: {name}\n"
+            f"description: Chain link to {target}.\n"
+            f"category: analysis_decision\n"
+            f"output_format: text\n"
+            f"steps:\n"
+            f"  - id: {name}_call\n"
+            f"    title: Delegate to {target}\n"
+            f"    directive_template: Hand off.\n"
+            f"    gates:\n"
+            f"      - delegated\n"
+            f"    anti_patterns:\n"
+            f"      - Skip\n"
+            f"    call: {target}\n",
+            encoding="utf-8",
+        )
+    parent = tmp_path / "level_a.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: level_a\n"
+        "description: Root of a 5-level descent chain.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: a_call\n"
+        "    title: Delegate to level_b\n"
+        "    directive_template: Hand off.\n"
+        "    gates:\n"
+        "      - delegated\n"
+        "    anti_patterns:\n"
+        "      - Skip\n"
+        "    call: level_b\n",
+        encoding="utf-8",
+    )
+    return parent
+
+
+def test_max_nesting_depth_banner_at_depth_4(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """5-level descent (A → B → C → D → E) exercises the D049 visual cap.
+    ``_indent_for`` clamps indentation at depth 4 (8 spaces). The
+    ``[max nesting depth reached]`` banner prints the first time the REPL
+    descends into a frame at depth == _MAX_DEPTH.
+
+    ``enter_sub_workflow`` has no server-side depth cap (only ``push_flow``
+    enforces one — see state.py:240-251 via max_stack_depth=3 in
+    tools.py:1726), so the chain runs to completion.
+
+    This runs in-process so the test can drive the REPL without feeding
+    5 stdin lines through a pipe; the shape under test is REPL visual
+    output, not subprocess plumbing.
+    """
+    parent = _write_five_level_chain(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(parent)])
+    # Only one stdin consumption: at the leaf terminal step.
+    stdin_lines = iter(["leaf content"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_out = io.StringIO()
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_out)
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 0, captured_err.getvalue()
+    out = captured_out.getvalue()
+    # All 4 descent banners fired.
+    assert "  → Entering sub-workflow 'level_b'" in out
+    assert "    → Entering sub-workflow 'level_c'" in out
+    assert "      → Entering sub-workflow 'level_d'" in out
+    # Level E sits at depth 4 — the visual cap. Indent stays at 8 spaces
+    # (4 levels × 2 spaces). Banner appears at that indent.
+    assert "        → Entering sub-workflow 'level_e'" in out
+    # The cap banner renders alongside the depth-4 descent banner.
+    assert "        [max nesting depth reached]" in out
+
+
+def test_repl_never_calls_get_state_across_edge_fixtures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SC #11 / D047 regression under the edge-case fixtures introduced
+    here: the 3-level descent path must derive all frame state from
+    envelope deltas, never via ``get_state``.
+    """
+    parent = _write_three_level_chain(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    tool_names: list[str] = []
+
+    def recording_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0:
+                tool_names.append(name)
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", recording_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(parent)])
+    stdin_lines = iter(["intro", "pre work", "gc artifact", "post work", "final"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_out = io.StringIO()
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_out)
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 0, captured_err.getvalue()
+    # Hard assertion: no get_state across the 3-level path.
+    assert "get_state" not in tool_names, tool_names
+
+
 def test_s01_s02_s03_regression_guard() -> None:
     """Existing S01/S02/S03 tests must run unchanged. If any needs edit
     during S04 work, the guard fires by virtue of pytest already running

@@ -145,6 +145,41 @@ def _print_terminal(envelope: dict, indent: str) -> None:
             file=sys.stderr,
         )
         return
+    # Parent output_schema rejection of child artifact on propagation. The
+    # server emits ``session_escalated`` with a ``called_workflow_error``
+    # wrapper whose nested ``child_error`` carries the validation errors
+    # produced by ``_validate_output`` against the parent call-step's schema
+    # (tools.py lines 712-725). Render the child errors verbatim under a
+    # decoded header; do NOT dump the artifact body (wire noise).
+    if code == "session_escalated":
+        wrapper = envelope.get("called_workflow_error") or {}
+        child_error = wrapper.get("child_error") or {}
+        if child_error.get("reason") == "parent_output_schema_fail":
+            child_wf = wrapper.get("child_workflow_type", "?")
+            errors = child_error.get("errors") or []
+            print(
+                f"Sub-workflow '{child_wf}' completed, but its artifact "
+                f"failed parent's output_schema:",
+                file=sys.stderr,
+            )
+            for err in errors:
+                print(f"  - {err}", file=sys.stderr)
+            print("Parent session escalated.", file=sys.stderr)
+            return
+        # Parent drifted off the call-step during sub-workflow propagation
+        # (tools.py lines 700-710). Envelope has no ``called_workflow_error``
+        # wrapper; parent_session_fingerprint + child_session_fingerprint sit
+        # at the top level. The parent's previously-stamped current_step is
+        # not part of the envelope — surface the fingerprints verbatim.
+        parent_fp = envelope.get("parent_session_fingerprint", "?")
+        child_fp = envelope.get("child_session_fingerprint", "?")
+        print(
+            f"Sub-workflow state drift: parent session (fingerprint "
+            f"{parent_fp}) is no longer at a call-step; child "
+            f"(fingerprint {child_fp}) retained for inspection.",
+            file=sys.stderr,
+        )
+        return
     if code == "invalid_argument" and envelope.get("field") == "call_context_from":
         # The error string is "call_context_from '<ref>' did not resolve in
         # parent step_data" — extract the ref between the first pair of
@@ -390,18 +425,38 @@ def main() -> None:
     step_id = ""
 
     while True:
-        # Ascent check runs FIRST: a submit_step call against the child's last
-        # step returns the PARENT's advance envelope with
-        # ``propagated_from_sub_workflow: True``. Pop the child frame, print
-        # the ascent banner, then fall through — the same envelope carries
-        # the parent's next_step or workflow_complete status for the normal
-        # branches below.
+        # Dispatch order (classification-first, D039): within this loop the
+        # ``propagated_from_sub_workflow`` pop-and-fall-through must be
+        # evaluated against the CURRENT envelope before its ``status`` is
+        # inspected — that is what lets a terminal propagation envelope
+        # (``status=workflow_complete`` on the parent after the last child
+        # step) still render an ascent banner before exit. Envelopes like
+        # ``workflow_changed`` emitted by ``_resolve_session`` on the child
+        # session do NOT carry ``propagated_from_sub_workflow``, so they
+        # bypass the pop branch entirely and route straight to the terminal
+        # decoder with the stack unmutated.
+        #
+        # A submit_step call against the top frame's last step returns a
+        # PARENT advance envelope with ``propagated_from_sub_workflow: True``.
+        # The server currently propagates exactly ONE level per submit_step
+        # call (``_propagate_to_parent`` returns ``_advance_parent`` directly
+        # at tools.py:733 and does not re-enter
+        # ``_auto_resume_on_top_frame_complete`` when the parent itself hits
+        # ``_COMPLETE``). The pop loop below is written against
+        # ``envelope["session_id"]`` so that if server semantics ever change
+        # to chain multi-level propagation in a single response the REPL
+        # adapts without edits; in today's world it pops exactly one frame.
         if envelope.get("propagated_from_sub_workflow"):
-            popped = stack.pop()
-            child_wf_name = popped["workflow"]["name"]
-            parent_depth = len(stack) - 1
-            child_indent = _indent_for(parent_depth + 1)
-            print(f"{child_indent}← Returned from sub-workflow '{child_wf_name}'")
+            target_sid = envelope.get("session_id")
+            while stack and stack[-1]["session_id"] != target_sid:
+                popped = stack.pop()
+                child_wf_name = popped["workflow"]["name"]
+                parent_depth = len(stack) - 1
+                child_indent = _indent_for(parent_depth + 1)
+                print(
+                    f"{child_indent}← Returned from sub-workflow "
+                    f"'{child_wf_name}'"
+                )
             # Do NOT continue: fall through to normal envelope classification.
 
         depth = len(stack) - 1
