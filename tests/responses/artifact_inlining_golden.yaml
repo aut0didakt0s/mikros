@@ -1,0 +1,9 @@
+version: 1
+description: "Full descent + ascent: parent intro, descend to child, child steps, ascent."
+entries:
+  - step_id: intro
+    response: "A short intro paragraph for the final report."
+  - step_id: gather
+    response: "Source A, Source B, Source C."
+  - step_id: brief
+    response: "# Brief\n\n## Findings\n\nKey observation."

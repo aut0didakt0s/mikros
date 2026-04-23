@@ -1,0 +1,9 @@
+version: 1
+description: "Golden path scripted run against canonical.yaml — three neutral steps."
+entries:
+  - step_id: alpha
+    response: "ok"
+  - step_id: bravo
+    response: "ok"
+  - step_id: charlie
+    response: "ok"

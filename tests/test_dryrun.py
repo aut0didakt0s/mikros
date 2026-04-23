@@ -21,6 +21,14 @@ CANONICAL_FIXTURE = FIXTURES_DIR / "canonical.yaml"
 DEMO_VALIDATION_FIXTURE = FIXTURES_DIR / "demo_validation.yaml"
 DEMO_BRANCHING_FIXTURE = FIXTURES_DIR / "demo_branching.yaml"
 PRECONDITION_BRANCHES_FIXTURE = FIXTURES_DIR / "precondition_with_branches.yaml"
+ARTIFACT_INLINING_PARENT_FIXTURE = FIXTURES_DIR / "artifact_inlining_parent.yaml"
+ARTIFACT_INLINING_CHILD_FIXTURE = FIXTURES_DIR / "artifact_inlining_child.yaml"
+
+RESPONSES_DIR = Path(__file__).parent / "responses"
+CANONICAL_GOLDEN = RESPONSES_DIR / "canonical_golden.yaml"
+DEMO_VALIDATION_GOLDEN = RESPONSES_DIR / "demo_validation_golden.yaml"
+DEMO_BRANCHING_GOLDEN = RESPONSES_DIR / "demo_branching_golden.yaml"
+ARTIFACT_INLINING_GOLDEN = RESPONSES_DIR / "artifact_inlining_golden.yaml"
 
 # Schema-failing payload (missing `confirmed`, fewer than 3 goals, short title).
 _INVALID_JSON = json.dumps({"title": "xy", "goals": ["only one"]})
@@ -1785,3 +1793,270 @@ def test_s01_s02_s03_regression_guard() -> None:
     present = {name for name in dir(this_mod) if name.startswith("test_")}
     missing = expected - present
     assert not missing, f"S01-S03 tests dropped: {missing}"
+
+
+# ---- Scripted-responses file (--responses-file) ----------------------------
+
+
+def test_scripted_readers_are_called_not_interactive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Structural invariant: scripted-mode reader replacements are installed
+    BEFORE the REPL calls any reader.
+
+    Monkey-patch both ``_read_response`` and ``_prompt_branch`` with
+    recording stubs that would raise if called; run ``main()`` with
+    ``--responses-file``; assert neither stub fired because
+    ``_install_scripted_mode`` overwrites them with scripted variants.
+    """
+    target = tmp_path / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    def boom_read_response() -> str:
+        raise AssertionError("_read_response stub should have been replaced")
+
+    def boom_prompt_branch(
+        branches: list, default: str, indent: str = ""
+    ) -> str:
+        raise AssertionError("_prompt_branch stub should have been replaced")
+
+    monkeypatch.setattr(dryrun_mod, "_read_response", boom_read_response)
+    monkeypatch.setattr(dryrun_mod, "_prompt_branch", boom_prompt_branch)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "megalos-dryrun",
+            str(target),
+            "--responses-file",
+            str(CANONICAL_GOLDEN),
+        ],
+    )
+
+    # Capture stdout/stderr so the assertion-error traceback (if any) lands
+    # in captured_err rather than the test harness.
+    import io
+
+    captured_out = io.StringIO()
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_out)
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 0, captured_err.getvalue()
+
+
+def test_scripted_canonical_golden(tmp_path: Path) -> None:
+    """Reuse canonical.yaml with canonical_golden.yaml; assert exit 0 and
+    all three step banners rendered on stdout."""
+    target = tmp_path / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    result = _run([str(target), "--responses-file", str(CANONICAL_GOLDEN)])
+    assert result.returncode == 0, result.stderr
+    assert "alpha" in result.stdout
+    assert "bravo" in result.stdout
+    assert "charlie" in result.stdout
+    assert "Workflow complete" in result.stdout
+
+
+def test_scripted_demo_validation_golden(tmp_path: Path) -> None:
+    """Reuse demo_validation.yaml with demo_validation_golden.yaml; assert
+    retry surface is exercised (one invalid + one valid) and exit 0."""
+    target = tmp_path / "demo_validation.yaml"
+    shutil.copy(DEMO_VALIDATION_FIXTURE, target)
+    result = _run([str(target), "--responses-file", str(DEMO_VALIDATION_GOLDEN)])
+    assert result.returncode == 0, result.stderr
+    assert "Validation failed:" in result.stderr
+    assert "Retries remaining:" in result.stderr
+    assert "summarize" in result.stdout
+
+
+def test_scripted_demo_branching_golden(tmp_path: Path) -> None:
+    """Reuse demo_branching.yaml with demo_branching_golden.yaml; assert
+    exit 0 and advanced_track banner rendered (confirming branch choice)."""
+    target = tmp_path / "demo_branching.yaml"
+    shutil.copy(DEMO_BRANCHING_FIXTURE, target)
+    result = _run([str(target), "--responses-file", str(DEMO_BRANCHING_GOLDEN)])
+    assert result.returncode == 0, result.stderr
+    assert "assess_expertise" in result.stdout
+    assert "advanced_track" in result.stdout
+    # Other tracks not taken — this is a sanity check on branch routing, not
+    # strict exclusion of the strings (they appear in the branches list).
+    assert "Workflow complete" in result.stdout
+
+
+def test_scripted_artifact_inlining_golden(tmp_path: Path) -> None:
+    """Reuse parent+child artifact_inlining fixtures; assert exit 0 and
+    both parent and indented child banners render."""
+    parent = tmp_path / "artifact_inlining_parent.yaml"
+    child = tmp_path / "artifact_inlining_child.yaml"
+    shutil.copy(ARTIFACT_INLINING_PARENT_FIXTURE, parent)
+    shutil.copy(ARTIFACT_INLINING_CHILD_FIXTURE, child)
+    result = _run([str(parent), "--responses-file", str(ARTIFACT_INLINING_GOLDEN)])
+    assert result.returncode == 0, result.stderr
+    assert "intro" in result.stdout
+    assert "Entering sub-workflow" in result.stdout
+    # Indented child banners (two-space indent per _indent_for at depth 1).
+    assert "  === Step: gather" in result.stdout
+    assert "  === Step: brief" in result.stdout
+    assert "Returned from sub-workflow" in result.stdout
+
+
+def test_scripted_missing_version_rejected(tmp_path: Path) -> None:
+    """Responses file without 'version' key exits 1 with decoded banner.
+
+    Format validation runs before workflow load, so the workflow_dir isn't
+    actually loaded here — but keep responses file outside it anyway to stay
+    consistent with the other scripted-mode tests.
+    """
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    responses = tmp_path / "no_version.yaml"
+    responses.write_text(
+        "entries:\n"
+        "  - step_id: alpha\n"
+        "    response: ok\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "missing required 'version' field" in result.stderr
+
+
+def test_scripted_unknown_version_rejected(tmp_path: Path) -> None:
+    """Responses file with unsupported version exits 1 with decoded banner."""
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    responses = tmp_path / "bad_version.yaml"
+    responses.write_text(
+        "version: 99\n"
+        "entries:\n"
+        "  - step_id: alpha\n"
+        "    response: ok\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "Unknown responses-file version: 99" in result.stderr
+    assert "Supported: [1]" in result.stderr
+
+
+def test_scripted_step_id_drift_exits(tmp_path: Path) -> None:
+    """Entry step_id not matching current REPL step exits 1 with both
+    expected and actual step_id named on stderr."""
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    responses = tmp_path / "drift.yaml"
+    # First entry matches (alpha), second drifts to unknown_step instead of
+    # bravo — REPL is at bravo when it consumes entry 2.
+    responses.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - step_id: alpha\n"
+        "    response: ok\n"
+        "  - step_id: unknown_step\n"
+        "    response: ok\n"
+        "  - step_id: charlie\n"
+        "    response: ok\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "unknown_step" in result.stderr
+    assert "bravo" in result.stderr
+
+
+def test_scripted_entry_type_mismatch_exits(tmp_path: Path) -> None:
+    """Entry has 'response' when a 'branch' is expected: exit 1, decoded banner."""
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "demo_branching.yaml"
+    shutil.copy(DEMO_BRANCHING_FIXTURE, target)
+    responses = tmp_path / "type_mismatch.yaml"
+    # assess_expertise expects a content response then a branch selection.
+    # Provide two 'response' entries for assess_expertise — second one should
+    # have been 'branch:' so the scripted reader detects the type mismatch.
+    responses.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - step_id: assess_expertise\n"
+        "    response: expert\n"
+        "  - step_id: assess_expertise\n"
+        "    response: oops_should_be_branch\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "expected branch selection but script provided response" in result.stderr
+
+
+def test_scripted_exhaustion_exits_with_expected_type(tmp_path: Path) -> None:
+    """Responses file too short: exit 1 with exhaustion banner naming the
+    expected entry type."""
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    responses = tmp_path / "too_short.yaml"
+    # canonical has three steps; provide only one entry.
+    responses.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - step_id: alpha\n"
+        "    response: ok\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "Responses file exhausted at step" in result.stderr
+    assert "(expecting: step response)" in result.stderr
+
+
+def test_scripted_unused_entries_guard(tmp_path: Path) -> None:
+    """Responses file longer than workflow needs: exit 1 with unused-entries banner."""
+    workflow_dir = tmp_path / "wf"
+    workflow_dir.mkdir()
+    target = workflow_dir / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    responses = tmp_path / "too_long.yaml"
+    responses.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "  - step_id: alpha\n"
+        "    response: ok\n"
+        "  - step_id: bravo\n"
+        "    response: ok\n"
+        "  - step_id: charlie\n"
+        "    response: ok\n"
+        "  - step_id: extra\n"
+        "    response: not_consumed\n",
+        encoding="utf-8",
+    )
+    result = _run([str(target), "--responses-file", str(responses)])
+    assert result.returncode == 1
+    assert "unused entries after workflow completion" in result.stderr
+    assert "1" in result.stderr  # one unused entry
+
+
+def test_interactive_mode_unchanged(tmp_path: Path) -> None:
+    """Regression: without --responses-file, interactive stdin-piped mode
+    still works identically to the pre-refactor behavior."""
+    target = tmp_path / "canonical.yaml"
+    shutil.copy(CANONICAL_FIXTURE, target)
+    result = _run([str(target)], input="ok\nok\nok\n")
+    assert result.returncode == 0, result.stderr
+    assert "alpha" in result.stdout
+    assert "Workflow complete" in result.stdout

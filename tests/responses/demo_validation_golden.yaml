@@ -1,0 +1,9 @@
+version: 1
+description: "Validation retry flow: one schema-failing submission, then a valid one."
+entries:
+  - step_id: collect_info
+    response: '{"title": "xy", "goals": ["only one"]}'
+  - step_id: collect_info
+    response: '{"title": "Project X", "goals": ["a", "b", "c"], "confirmed": true}'
+  - step_id: summarize
+    response: "summary line"

@@ -1,0 +1,9 @@
+version: 1
+description: "Branching flow: pick the advanced_track branch, then respond on that track."
+entries:
+  - step_id: assess_expertise
+    response: "user is an expert"
+  - step_id: assess_expertise
+    branch: advanced_track
+  - step_id: advanced_track
+    response: "deep advanced material"

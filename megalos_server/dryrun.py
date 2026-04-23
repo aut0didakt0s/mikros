@@ -54,6 +54,17 @@ _TERMINAL_STATUSES = frozenset(
 _MAX_DEPTH = 4
 
 
+# Scripted-run state. ``None`` in interactive mode; populated by
+# ``_install_scripted_mode`` when ``--responses-file <path>`` is passed. The
+# REPL loop updates ``current_step_id`` and ``depth`` right before any reader
+# call so scripted variants of ``_read_response`` / ``_prompt_branch`` can
+# match entries against the REPL cursor. Shape:
+#   {"entries": list[dict], "pos": int, "current_step_id": str, "depth": int}
+_SCRIPTED: dict | None = None
+
+_SUPPORTED_RESPONSES_VERSIONS = (1,)
+
+
 def _indent_for(depth: int) -> str:
     """Return the visual-indent prefix for a given stack depth."""
     return "  " * min(depth, _MAX_DEPTH)
@@ -222,6 +233,17 @@ def _render_precondition(pc: dict) -> str | None:
     return None
 
 
+def _read_response() -> str:
+    """Read one operator response line from stdin.
+
+    Extracted from two inline ``input("> ")`` sites so scripted-run mode can
+    monkey-patch a single module-level function instead of intercepting the
+    builtin. The ``"> "`` prompt string MUST NOT change — interactive stdout
+    is pinned by existing tests.
+    """
+    return input("> ")
+
+
 def _prompt_branch(branches: list, default: str, indent: str = "") -> str:
     """Prompt the operator for a branch choice; return the resolved step_id.
 
@@ -259,6 +281,183 @@ def _prompt_branch(branches: list, default: str, indent: str = "") -> str:
         print(
             f"Invalid branch selection '{raw}'. Enter 1-{n} or empty.",
             file=sys.stderr,
+        )
+
+
+def _scripted_exit(msg: str) -> None:
+    """Print a decoded scripted-mode banner to stderr and exit 1."""
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def _parse_responses_file(path: Path) -> list[dict]:
+    """Load + validate the responses file; return the list of entries.
+
+    Format rules are enforced once at __main__ entry so the REPL never sees
+    malformed entries. On any violation this function prints a decoded banner
+    and ``sys.exit(1)``. See ``_install_scripted_mode`` for the caller.
+    """
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        _scripted_exit(f"Responses file {path} is not valid YAML: {e}")
+    if not isinstance(doc, dict):
+        _scripted_exit(
+            f"Responses file {path} must be a YAML mapping at top level."
+        )
+    if "version" not in doc:
+        _scripted_exit(
+            "Responses file missing required 'version' field. Expected: version: 1"
+        )
+    version = doc["version"]
+    if version not in _SUPPORTED_RESPONSES_VERSIONS:
+        _scripted_exit(
+            f"Unknown responses-file version: {version}. "
+            f"Supported: {list(_SUPPORTED_RESPONSES_VERSIONS)}"
+        )
+    entries = doc.get("entries")
+    if not isinstance(entries, list):
+        _scripted_exit(
+            "Responses file 'entries' field required and must be a list."
+        )
+    validated: list[dict] = []
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            _scripted_exit(
+                f"Responses file entry {i}: must be a mapping."
+            )
+        step_id = entry.get("step_id")
+        if not isinstance(step_id, str) or not step_id:
+            _scripted_exit(
+                f"Responses file entry {i}: 'step_id' field required (string)."
+            )
+        has_response = "response" in entry
+        has_branch = "branch" in entry
+        if has_response and has_branch:
+            _scripted_exit(
+                f"Responses file entry {i} (step_id={step_id}): "
+                f"must have exactly one of 'response' or 'branch', not both."
+            )
+        if not has_response and not has_branch:
+            _scripted_exit(
+                f"Responses file entry {i} (step_id={step_id}): "
+                f"must have exactly one of 'response' or 'branch'."
+            )
+        if has_response and not isinstance(entry["response"], str):
+            _scripted_exit(
+                f"Responses file entry {i} (step_id={step_id}): "
+                f"'response' must be a string."
+            )
+        if has_branch and not isinstance(entry["branch"], str):
+            _scripted_exit(
+                f"Responses file entry {i} (step_id={step_id}): "
+                f"'branch' must be a string."
+            )
+        validated.append(entry)
+    return validated
+
+
+def _scripted_consume(expected_kind: str) -> dict:
+    """Consume one entry for the current REPL step, enforcing drift/type rules.
+
+    ``expected_kind`` is ``"response"`` or ``"branch"``. Walk-past of
+    non-matching entries is enabled only when descent depth > 0 (see plan's
+    "Sub-workflow descent semantics"); at depth 0 a mismatch is a drift and
+    exits immediately.
+    """
+    assert _SCRIPTED is not None
+    state = _SCRIPTED
+    repl_step = state["current_step_id"]
+    depth = state["depth"]
+    expected_label = (
+        "step response" if expected_kind == "response" else "branch selection"
+    )
+    # Walk-past loop: only runs at depth > 0, and stops at first match OR
+    # entry exhaustion. At depth 0 the `while` exits immediately on first
+    # mismatch via the drift-banner path below.
+    while True:
+        if state["pos"] >= len(state["entries"]):
+            _scripted_exit(
+                f"Responses file exhausted at step {repl_step} "
+                f"(expecting: {expected_label})"
+            )
+        entry = state["entries"][state["pos"]]
+        if entry["step_id"] == repl_step:
+            # Type-match check.
+            if expected_kind == "response" and "response" not in entry:
+                _scripted_exit(
+                    f"At step {repl_step}, expected step response but "
+                    f"script provided branch selection"
+                )
+            if expected_kind == "branch" and "branch" not in entry:
+                _scripted_exit(
+                    f"At step {repl_step}, expected branch selection but "
+                    f"script provided response"
+                )
+            state["pos"] += 1
+            return entry
+        # step_id mismatch.
+        if depth > 0:
+            # Walk past: skip the non-matching entry and retry.
+            state["pos"] += 1
+            continue
+        # At depth 0 any mismatch is drift.
+        _scripted_exit(
+            f"Script entry expected step_id={entry['step_id']}, "
+            f"REPL at step_id={repl_step}"
+        )
+
+
+def _scripted_read_response() -> str:
+    """Scripted replacement for ``_read_response`` — reads from loaded entries."""
+    return str(_scripted_consume("response")["response"])
+
+
+def _scripted_prompt_branch(
+    branches: list, default: str, indent: str = ""
+) -> str:
+    """Scripted replacement for ``_prompt_branch`` — reads from loaded entries.
+
+    Signature preserved per D046 (2-arg-default with ``indent=""``) so that
+    S03 tests monkey-patching a 2-arg ``_prompt_branch`` continue to match.
+    ``branches``, ``default``, ``indent`` are accepted but unused — the
+    branch choice comes from the script.
+    """
+    return str(_scripted_consume("branch")["branch"])
+
+
+def _install_scripted_mode(path: Path) -> None:
+    """Load the responses file and install scripted readers module-globally.
+
+    Called once from ``main()`` before REPL entry when ``--responses-file``
+    is passed. Exits 1 on format errors before any REPL state is built.
+    """
+    global _SCRIPTED, _read_response, _prompt_branch
+    entries = _parse_responses_file(path)
+    _SCRIPTED = {
+        "entries": entries,
+        "pos": 0,
+        "current_step_id": "",
+        "depth": 0,
+    }
+    _read_response = _scripted_read_response
+    _prompt_branch = _scripted_prompt_branch
+
+
+def _scripted_check_unused_on_complete() -> None:
+    """Called right before ``sys.exit(0)`` on ``workflow_complete``.
+
+    In interactive mode ``_SCRIPTED`` is ``None`` and this is a no-op. In
+    scripted mode, if any entries remain unconsumed the run is treated as a
+    script-authoring error and exits 1 with a decoded banner.
+    """
+    if _SCRIPTED is None:
+        return
+    remaining = len(_SCRIPTED["entries"]) - _SCRIPTED["pos"]
+    if remaining > 0:
+        _scripted_exit(
+            f"Responses file had {remaining} unused entries after "
+            f"workflow completion"
         )
 
 
@@ -349,7 +548,27 @@ def main() -> None:
         default="",
         help="Initial context string passed to start_workflow",
     )
+    parser.add_argument(
+        "--responses-file",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to a YAML file driving a scripted run. See the "
+            "dry-run docs for format (version: 1, entries: [step_id + "
+            "response|branch])."
+        ),
+    )
     args = parser.parse_args()
+
+    # Scripted-run install — must happen BEFORE any REPL state is built so
+    # format errors exit before workflow load cost, and so module-global
+    # reader replacements are in place before the first ``input("> ")`` site.
+    if args.responses_file is not None:
+        responses_path: Path = args.responses_file.resolve()
+        if not responses_path.exists():
+            print(f"Responses file not found: {responses_path}", file=sys.stderr)
+            sys.exit(1)
+        _install_scripted_mode(responses_path)
 
     # Step 1 — Resolve + check target path.
     target: Path = args.workflow.resolve()
@@ -481,8 +700,11 @@ def main() -> None:
                 file=sys.stderr,
             )
             # Re-prompt: DO NOT mutate step_id, DO NOT track retry count locally.
+            if _SCRIPTED is not None:
+                _SCRIPTED["current_step_id"] = step_id
+                _SCRIPTED["depth"] = depth
             try:
-                response = input("> ")
+                response = _read_response()
             except EOFError:
                 print("Dry-run aborted by user (EOF)", file=sys.stderr)
                 sys.exit(1)
@@ -503,7 +725,10 @@ def main() -> None:
         # Classification 2 — terminal.
         if status in _TERMINAL_STATUSES:
             _print_terminal(envelope, indent)
-            sys.exit(0 if status == "workflow_complete" else 1)
+            if status == "workflow_complete":
+                _scripted_check_unused_on_complete()
+                sys.exit(0)
+            sys.exit(1)
 
         # Classification 3 — advance. Path-less envelope (no current_step and
         # no next_step) surfaces as KeyError: intentional bug signal.
@@ -560,8 +785,11 @@ def main() -> None:
         directive = envelope["directive"]
         print(directive)
         print()
+        if _SCRIPTED is not None:
+            _SCRIPTED["current_step_id"] = step_id
+            _SCRIPTED["depth"] = depth
         try:
-            response = input("> ")
+            response = _read_response()
         except EOFError:
             print("Dry-run aborted by user (EOF)", file=sys.stderr)
             sys.exit(1)
