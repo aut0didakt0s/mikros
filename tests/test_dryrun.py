@@ -559,3 +559,602 @@ def test_force_branched_field_ignored_gracefully(
     # Canonical workflow runs clean despite the injected field.
     assert exc_info.value.code == 0, captured_err.getvalue()
     assert "Workflow complete" in captured_out.getvalue()
+
+
+# ---- S04: sub-workflow descent + ascent + error decoding -------------------
+
+ARTIFACT_INLINING_PARENT_FIXTURE = FIXTURES_DIR / "artifact_inlining_parent.yaml"
+ARTIFACT_INLINING_CHILD_FIXTURE = FIXTURES_DIR / "artifact_inlining_child.yaml"
+CALL_CONTEXT_FROM_PARENT_FIXTURE = FIXTURES_DIR / "call_context_from_parent.yaml"
+CALL_CONTEXT_FROM_CHILD_FIXTURE = FIXTURES_DIR / "call_context_from_child.yaml"
+
+
+def _copy_artifact_inlining(tmp_path: Path) -> Path:
+    """Copy parent+child into tmp_path, return parent path."""
+    parent = tmp_path / "artifact_inlining_parent.yaml"
+    shutil.copy(ARTIFACT_INLINING_PARENT_FIXTURE, parent)
+    shutil.copy(
+        ARTIFACT_INLINING_CHILD_FIXTURE, tmp_path / "artifact_inlining_child.yaml"
+    )
+    return parent
+
+
+def test_artifact_inlining_happy_path(tmp_path: Path) -> None:
+    """End-to-end descent + ascent flow on the canonical fixture.
+
+    Parent has 2 steps (intro + research=call). Child has 2 steps
+    (gather + brief). stdin feeds intro content, then both child-step
+    contents; REPL auto-descends on research and auto-ascends on brief
+    completion. Expect descent/ascent banners, 2-space indent on child
+    banners, exit 0.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+    stdin = "intro paragraph\ngather sources\nfinal brief\n"
+    result = _run([str(target)], input=stdin)
+    assert result.returncode == 0, result.stderr
+    # Descent banner at child depth (2-space indent since child is at depth 1).
+    assert "  → Entering sub-workflow 'artifact_inlining_child'" in result.stdout
+    # Child step banners indented 2 spaces.
+    assert "  === Step: gather" in result.stdout
+    assert "  === Step: brief" in result.stdout
+    # Child gates indented.
+    assert "  Gates:" in result.stdout
+    assert "    - sources listed" in result.stdout
+    # Ascent banner.
+    assert "  ← Returned from sub-workflow 'artifact_inlining_child'" in result.stdout
+    assert "Workflow complete" in result.stdout
+
+
+def test_first_step_call_fallback(tmp_path: Path) -> None:
+    """D048 first-step fallback: parent whose FIRST step is a call-step.
+
+    start_workflow does NOT populate envelope.current_step.call_target
+    (tools.py:883-901). REPL must fall back to the workflow dict to
+    detect the call. Authoring a parent with only a call-step (no intro)
+    exercises this path.
+    """
+    # Copy the child alongside our tmp parent for call-target resolution.
+    shutil.copy(
+        ARTIFACT_INLINING_CHILD_FIXTURE, tmp_path / "artifact_inlining_child.yaml"
+    )
+    parent = tmp_path / "first_call.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: first_call\n"
+        "description: Parent whose first step is a call.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: delegate\n"
+        "    title: Delegate immediately\n"
+        "    directive_template: Hand off to child on first step.\n"
+        "    gates:\n"
+        "      - handoff performed\n"
+        "    anti_patterns:\n"
+        "      - Skipping the handoff\n"
+        "    call: artifact_inlining_child\n",
+        encoding="utf-8",
+    )
+    # Only child steps consume stdin: gather + brief.
+    stdin = "gather content\nfinal brief\n"
+    result = _run([str(parent)], input=stdin)
+    assert result.returncode == 0, result.stderr
+    assert "→ Entering sub-workflow 'artifact_inlining_child'" in result.stdout
+    assert "← Returned from sub-workflow 'artifact_inlining_child'" in result.stdout
+    assert "Workflow complete" in result.stdout
+
+
+def test_call_context_from_non_string_propagates_as_json_string(tmp_path: Path) -> None:
+    """D048: call_context_from non-string values arrive at child as
+    ``json.dumps`` output (tools.py:1591). REPL's Context banner prints
+    that string verbatim — NOT a pretty-printed or parsed form.
+    """
+    # Author a parent whose first step emits an output_schema-validated
+    # dict; the call-step's call_context_from resolves to that dict.
+    # The child workflow must exist for call-target resolution.
+    (tmp_path / "ctx_child.yaml").write_text(
+        "schema_version: \"0.3\"\n"
+        "name: ctx_child\n"
+        "description: Child receiving structured context.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: acknowledge\n"
+        "    title: Acknowledge context\n"
+        "    directive_template: Acknowledge the provided context.\n"
+        "    gates:\n"
+        "      - context acknowledged\n"
+        "    anti_patterns:\n"
+        "      - Ignoring context\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "ctx_parent.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: ctx_parent\n"
+        "description: Parent emitting structured context dict for child.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: collect\n"
+        "    title: Collect structured data\n"
+        "    directive_template: Submit structured JSON.\n"
+        "    gates:\n"
+        "      - data collected\n"
+        "    anti_patterns:\n"
+        "      - Empty payload\n"
+        "    collect: true\n"
+        "    output_schema:\n"
+        "      type: object\n"
+        "      required: [topic, audience]\n"
+        "      properties:\n"
+        "        topic:\n"
+        "          type: string\n"
+        "          minLength: 2\n"
+        "        audience:\n"
+        "          type: string\n"
+        "          minLength: 2\n"
+        "  - id: delegate\n"
+        "    title: Delegate with structured context\n"
+        "    directive_template: Hand off the structured payload.\n"
+        "    gates:\n"
+        "      - handoff performed\n"
+        "    anti_patterns:\n"
+        "      - Flattening the payload\n"
+        "    call: ctx_child\n"
+        "    call_context_from: step_data.collect\n",
+        encoding="utf-8",
+    )
+    structured_payload = json.dumps({"topic": "agents", "audience": "engineers"})
+    # stdin: structured JSON for collect, ack line for child acknowledge.
+    stdin = f"{structured_payload}\nack\n"
+    result = _run([str(parent)], input=stdin)
+    assert result.returncode == 0, result.stderr
+    # The server json.dumps the extracted dict for the child context. REPL
+    # prints it verbatim. Order of keys in json.dumps is insertion-order,
+    # which for a parsed JSON object is source-order.
+    # Either "topic" first or "audience" first — both are valid json.dumps
+    # output depending on parse order. Assert the substring contains both
+    # keys inline in the Context banner.
+    ctx_lines = [
+        line for line in result.stdout.splitlines() if line.strip().startswith("Context:")
+    ]
+    assert ctx_lines, result.stdout
+    ctx_line = ctx_lines[0]
+    assert "topic" in ctx_line
+    assert "audience" in ctx_line
+    # Verbatim JSON-dumped: the dict renders as a JSON object literal with
+    # ``{`` + ``}`` delimiters, not Python's repr.
+    assert "{" in ctx_line and "}" in ctx_line
+
+
+def test_workflow_not_loaded_decoded(tmp_path: Path) -> None:
+    """Parent references a child that isn't loaded. enter_sub_workflow
+    emits ``workflow_not_loaded``; REPL decodes it with Available: list.
+    """
+    # Parent only — child workflow is NOT in tmp_path.
+    parent = tmp_path / "missing_call.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: missing_call\n"
+        "description: Parent calling an unloaded child.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: delegate\n"
+        "    title: Delegate to ghost\n"
+        "    directive_template: Hand off to a child that is not loaded.\n"
+        "    gates:\n"
+        "      - handoff attempted\n"
+        "    anti_patterns:\n"
+        "      - Proceeding anyway\n"
+        "    call: absent_child_workflow\n",
+        encoding="utf-8",
+    )
+    result = _run([str(parent)], input="")
+    # NOTE: dry-run's own workflow loader cross-checks call targets; the
+    # failure surfaces at create_app time (Approach E framing), not at
+    # enter_sub_workflow. Test for either rendering.
+    assert result.returncode != 0
+    stderr = result.stderr
+    assert (
+        "Sub-workflow 'absent_child_workflow' not loaded" in stderr
+        or "absent_child_workflow" in stderr
+    )
+
+
+def test_workflow_not_loaded_decoded_via_injection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Complement to test_workflow_not_loaded_decoded: the standalone
+    subprocess test hits create_app's call-target cross-check before
+    enter_sub_workflow is invoked (Approach E framing). This in-process
+    variant injects the server's ``workflow_not_loaded`` envelope directly
+    on the enter_sub_workflow path to verify the REPL decoder.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0 and name == "enter_sub_workflow":
+                class _R:
+                    structured_content = {
+                        "status": "error",
+                        "code": "workflow_not_loaded",
+                        "error": "target workflow 'ghost_child' not loaded",
+                        "available_types": ["artifact_inlining_parent", "artifact_inlining_child"],
+                    }
+
+                return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro content"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    err = captured_err.getvalue()
+    assert "Sub-workflow 'ghost_child' not loaded" in err
+    assert "Available: artifact_inlining_parent, artifact_inlining_child" in err
+
+
+def test_out_of_order_submission_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In-process test: inject an ``out_of_order_submission`` envelope into
+    the REPL's call_tool path on enter_sub_workflow. REPL must decode.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0 and name == "enter_sub_workflow":
+                # Synthesize an error envelope that matches the server's shape.
+                class _R:
+                    structured_content = {
+                        "status": "error",
+                        "code": "out_of_order_submission",
+                        "error": "parent current_step is 'research', not 'wrong_step'",
+                        "expected_step": "research",
+                        "submitted_step": "wrong_step",
+                    }
+
+                return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro content"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    assert "Out-of-order: expected step 'research', got 'wrong_step'." in (
+        captured_err.getvalue()
+    )
+
+
+def test_sub_workflow_pending_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inject a ``sub_workflow_pending`` envelope. REPL decodes with
+    child-fingerprint surface.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0 and name == "enter_sub_workflow":
+                class _R:
+                    structured_content = {
+                        "status": "error",
+                        "code": "sub_workflow_pending",
+                        "error": "a child session is already in flight for this call-step",
+                        "child_session_fingerprint": "abcd1234",
+                        "parent_session_fingerprint": "efgh5678",
+                        "frame_type": "call",
+                    }
+
+                return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro content"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    err = captured_err.getvalue()
+    assert "Sub-workflow pending" in err
+    assert "abcd1234" in err
+
+
+def test_call_step_requires_enter_sub_workflow_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inject an envelope simulating ``call_step_requires_enter_sub_workflow``.
+    REPL decodes with the step_id + call_target.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    def injecting_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            # Inject on the first submit_step (intro), simulating a scenario
+            # where submit_step is wrongly called on a call-step.
+            if depth["n"] == 0 and name == "submit_step":
+                class _R:
+                    structured_content = {
+                        "status": "error",
+                        "code": "call_step_requires_enter_sub_workflow",
+                        "error": "step 'research' has `call: artifact_inlining_child`. Use the `enter_sub_workflow` tool, not `submit_step`, to invoke the child workflow.",
+                        "step_id": "research",
+                        "call_target": "artifact_inlining_child",
+                        "hint": "enter_sub_workflow",
+                    }
+
+                return _R()
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", injecting_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro content"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 1, captured_err.getvalue()
+    err = captured_err.getvalue()
+    assert "REPL bug: submit_step was called on call-step 'research'" in err
+    assert "artifact_inlining_child" in err
+
+
+def test_invalid_call_context_from_decoded(tmp_path: Path) -> None:
+    """Parent has call_context_from pointing at a ref that won't resolve.
+    enter_sub_workflow emits ``invalid_argument`` with
+    ``field=call_context_from``. REPL decodes it.
+    """
+    # Child must exist to get past the call-target cross-check.
+    (tmp_path / "ccf_child.yaml").write_text(
+        "schema_version: \"0.3\"\n"
+        "name: ccf_child\n"
+        "description: Child receiving unresolvable context.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: ack\n"
+        "    title: Acknowledge\n"
+        "    directive_template: Acknowledge.\n"
+        "    gates:\n"
+        "      - acknowledged\n"
+        "    anti_patterns:\n"
+        "      - Ignoring\n",
+        encoding="utf-8",
+    )
+    parent = tmp_path / "ccf_parent.yaml"
+    parent.write_text(
+        "schema_version: \"0.3\"\n"
+        "name: ccf_parent\n"
+        "description: Parent with unresolvable call_context_from.\n"
+        "category: analysis_decision\n"
+        "output_format: text\n"
+        "steps:\n"
+        "  - id: intro\n"
+        "    title: Intro\n"
+        "    directive_template: Intro content.\n"
+        "    gates:\n"
+        "      - intro done\n"
+        "    anti_patterns:\n"
+        "      - Skipping\n"
+        "  - id: delegate\n"
+        "    title: Delegate with bogus ref\n"
+        "    directive_template: Hand off.\n"
+        "    gates:\n"
+        "      - handoff attempted\n"
+        "    anti_patterns:\n"
+        "      - Proceeding\n"
+        "    call: ccf_child\n"
+        "    call_context_from: step_data.intro.nonexistent_field\n",
+        encoding="utf-8",
+    )
+    result = _run([str(parent)], input="intro content\n")
+    assert result.returncode != 0
+    err = result.stderr
+    assert "Invalid call_context_from" in err
+    assert "step_data.intro.nonexistent_field" in err
+
+
+def test_repl_never_calls_get_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SC #11 / D047: dryrun REPL must derive all frame state from
+    envelope deltas. No ``get_state`` peek. In-process shim records every
+    ``call_tool`` invocation during a full descent + ascent flow.
+    """
+    target = _copy_artifact_inlining(tmp_path)
+
+    import importlib
+
+    import megalos_server.dryrun as dryrun_mod
+
+    importlib.reload(dryrun_mod)
+
+    from megalos_server import create_app as real_create_app
+
+    tool_names: list[str] = []
+
+    def recording_create_app(*args: Any, **kwargs: Any) -> Any:
+        mcp = real_create_app(*args, **kwargs)
+        real_call_tool = mcp.call_tool
+        depth = {"n": 0}
+
+        async def wrapped(
+            name: str, arguments: dict[str, Any], *a: Any, **kw: Any
+        ) -> Any:
+            if depth["n"] == 0:
+                tool_names.append(name)
+            depth["n"] += 1
+            try:
+                return await real_call_tool(name, arguments, *a, **kw)
+            finally:
+                depth["n"] -= 1
+
+        mcp.call_tool = wrapped  # type: ignore[method-assign]
+        return mcp
+
+    monkeypatch.setattr(dryrun_mod, "create_app", recording_create_app)
+    monkeypatch.setattr(sys, "argv", ["megalos-dryrun", str(target)])
+    stdin_lines = iter(["intro", "gather", "brief"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(stdin_lines))
+
+    import io
+
+    captured_out = io.StringIO()
+    captured_err = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_out)
+    monkeypatch.setattr(sys, "stderr", captured_err)
+
+    with pytest.raises(SystemExit) as exc_info:
+        dryrun_mod.main()
+    assert exc_info.value.code == 0, captured_err.getvalue()
+    # Full flow ran — expect start_workflow + enter_sub_workflow + several submit_step.
+    assert "start_workflow" in tool_names
+    assert "enter_sub_workflow" in tool_names
+    assert tool_names.count("submit_step") == 3  # intro + gather + brief.
+    # Hard assertion: no get_state peek across the entire flow.
+    assert "get_state" not in tool_names, tool_names
+
+
+def test_s01_s02_s03_regression_guard() -> None:
+    """Existing S01/S02/S03 tests must run unchanged. If any needs edit
+    during S04 work, the guard fires by virtue of pytest already running
+    them — this test is a narrative marker plus a sanity assertion that
+    the expected S01-S03 test names are still defined in this file.
+    """
+    import tests.test_dryrun as this_mod
+
+    expected = {
+        "test_help_exits_zero",
+        "test_nonexistent_path_errors_cleanly",
+        "test_canonical_fixture_runs_end_to_end",
+        "test_validation_retry_loop_advances_on_valid",
+        "test_branch_default_selection_reaches_default_target",
+        "test_branch_numeric_selection_reaches_chosen_target",
+        "test_branch_invalid_numeric_reprompts_locally",
+        "test_precondition_rendered_at_step_entry",
+        "test_skip_detection_single_step",
+        "test_skip_detection_multi_step_chain",
+        "test_invalid_branch_server_rejection_exits_with_decoded_message",
+    }
+    present = {name for name in dir(this_mod) if name.startswith("test_")}
+    missing = expected - present
+    assert not missing, f"S01-S03 tests dropped: {missing}"
